@@ -1,0 +1,20 @@
+
+# project infrstructure
+
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+
+# quarto infrastructure
+.quarto/
+quarto/
+
+# folders
+
+
+# file types
+*.xl*
+
+# files
+

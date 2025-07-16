@@ -1,0 +1,16 @@
+---
+format:
+  html:
+    toc: true
+    toc-depth: 4
+    page-layout: full
+---
+
+# Explore
+
+```{r}
+#| label: setup
+
+# source(here::here("data-raw", "R", "setup.R"))
+
+```

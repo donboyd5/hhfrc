@@ -11,7 +11,8 @@
 quarto/
 
 # folders
-
+data-raw/judy
+data-raw/rds
 
 # file types
 *.xl*

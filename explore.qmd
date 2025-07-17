@@ -34,7 +34,7 @@ Accounts data
 acctfname <- "accounts_2025-07-16.csv"
 
 accounts1 <- vroom(
-  fs::path(hhdr, acctfname),
+  fs::path(neon, acctfname),
   col_types = cols(.default = col_character())
 )
 glimpse(accounts1)
@@ -66,7 +66,7 @@ Households data
 hhfname <- "households_2025-07-16.csv"
 
 hh1 <- vroom(
-  fs::path(hhdr, hhfname),
+  fs::path(neon, hhfname),
   col_types = cols(.default = col_character())
 )
 skim(hh1)

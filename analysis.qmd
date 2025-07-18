@@ -36,6 +36,8 @@ rds <- fs::path(hhdr, "rds")
 Linkages obtained from "Don's all-contacts report", an Additional Contact Report; run on 2025-07-18.
 
 ```{r}
+#| label: linkages
+#| eval: false
 
 linkfname <- "additional_contacts_linkage_2025-07-18.csv"
 
@@ -124,6 +126,7 @@ saveRDS(link4, fs::path(rds, "linkages.rds"))
 
 ```{r}
 #| label: accounts
+#| eval: false
 
 acctfname <- "accounts_2025-07-16.csv"
 
@@ -158,6 +161,7 @@ saveRDS(accounts, fs::path(rds, "accounts.rds"))
 
 ```{r}
 #| label: donations
+#| eval: false
 
 donorfname <- "donations_2025-07-16.csv"
 
@@ -196,6 +200,7 @@ saveRDS(donors3, fs::path(rds, "donations.rds"))
 
 ```{r}
 #| label: registrations
+#| eval: false
 
 regfnames <- c(
   "registrations_2011_through_2019.csv",
@@ -283,4 +288,38 @@ donations <- readRDS(fs::path(rds, "donations.rds"))
 registrations <- readRDS(fs::path(rds, "registrations.rds"))
 
 ```
+
+Our goal is to define the top 20% of all Hubbard Hall donors from the past 11 years (I think that was how far back we said this went) and then also from the past 5 years.
+
+We are looking for contact family name, total giving all time, last gift date, last FY total giving amount, and for the top 20% a breakdown of what their gift categories were (we want a complete donor profile, so for each donor we want to see the total contribution amount that includes donations, class purchases, ticket buys, etc.)
+
+
+### Top 20% all years
+
+
+```{r}
+
+glimpse(donations)
+
+df1 <- donations |> 
+  right_join(accounts |> filter(type=="Individual") |> select(accountid, acctname2=acctname), by = join_by(accountid))
+  filter(type=="DONATION") |> # exclude pledges
+  summarise(amount = sum(amount), .by=c(accountid, acctname))
+
+df2 <- donations |> 
+  filter(type=="DONATION") |>  # exclude pledges
+  left_join(accounts |> 
+    select(accountid, acctname2=acctname, atype=type),
+    by = join_by(accountid)) |>
+      filter(atype=="Individual") |> 
+    summarise(amount = sum(amount), .by=c(accountid, acctname)) |> 
+  arrange(desc(amount))
+
+
+
+```
+
+### Top 20% 5 years
+
+
 

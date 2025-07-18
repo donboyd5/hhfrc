@@ -11,8 +11,10 @@
 quarto/
 
 # folders
-data-raw/judy
-data-raw/rds
+_freeze/
+_web/
+data-raw/judy/
+data-raw/rds/
 site_libs/
 
 # file types

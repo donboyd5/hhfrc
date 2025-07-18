@@ -8,8 +8,13 @@ format:
 
 # Work with the data
 
-## Setup
+## Questions
 
+-   Under Accounts, what does Households tell us – how do we link individuals to households?
+
+![](images/paste-1.png)
+
+## Setup
 
 ```{r}
 #| label: setup
@@ -23,42 +28,12 @@ rds <- fs::path(hhdr, "rds")
 
 ```
 
-
 ## Get and save data
 
-Accounts data
 
-```{r}
-#| label: accounts
+### Households data
 
-acctfname <- "accounts_2025-07-16.csv"
-
-accounts1 <- vroom(
-  fs::path(neon, acctfname),
-  col_types = cols(.default = col_character())
-)
-glimpse(accounts1)
-
-accounts <- accounts1 |>
-  rename_with(.fn = tolower) |>
-  rename(
-    name = account,
-    accountid = id,
-    subtype = 4,
-    pcontact = `primary contact`,
-    zip = `zip code`,
-    created = `created on`,
-    ocategory = `origin category`,
-    odetail = `origin detail`
-  ) |>
-  select(-...20)
-skimr::skim(accounts)
-
-saveRDS(accounts, fs::path(rds, "accounts.rds"))
-
-```
-
-Households data
+-   Households: HH account id 34516 is a duplicate (2 records) with 2 different phone numbers (518) 744-6736 (O) and (518) 677-7893 (O) but otherwise the same
 
 ```{r}
 #| label: households
@@ -97,7 +72,13 @@ cbind(names(hh1), names(hh2))
 glimpse(hh2)
 
 hh3 <- hh2 |>
+  filter(!(hhaccountid == "34516" & hhphone == "(518) 744-6736 (O)")) |> # drop one of the duplicate households
   mutate(
+    hhphone2 = ifelse(
+      hhaccountid == "34516",
+      "(518) 744-6736 (O)",
+      NA_character_
+    ),
     hhncontacts = as.integer(hhncontacts),
     totrevenue = as.numeric(totrevenue),
     ntransactions = as.integer(ntransactions),
@@ -112,43 +93,106 @@ saveRDS(hh3, fs::path(rds, "households.rds"))
 
 ```
 
-### Link household members based on address (?).
+
+### Link household members based on address
+
+Duplicates:
+
+-   Households: HH account id 34516 is a duplicate (2 records) with 2 different phone numbers (518) 744-6736 (O) and (518) 677-7893 (O) but otherwise the same
+-   Accounts: no duplicates
 
 ```{r}
 accounts <- readRDS(fs::path(rds, "accounts.rds"))
-hholds <- readRDS(fs::path(rds, "households.rds"))
+households <- readRDS(fs::path(rds, "households.rds"))
 
-glimpse(accounts)
-glimpse(hholds)
+anyDuplicated(accounts$accountid) # 0
+anyDuplicated(households$hhaccountid) # was rec #1215, account "34516" Jessica Roosevelt
 
-mrg1 <- left_join(
-  hholds,
-  accounts,
-  by = join_by(address, city, state, zip, country),
-  relationship = "many-to-many"
+remove_any <- function(s, vec) {
+  # Create regex pattern that matches any element in vec
+  pattern <- str_c(vec, collapse = "|")
+  # Remove all matches from each string using map_chr
+  map_chr(s, \(x) str_remove_all(x, pattern))
+}
+
+drops <- c(
+  "av",
+  "av.",
+  "ave",
+  "ave.",
+  "avenue",
+  "ln",
+  "ln.",
+  "lane",
+  "rd",
+  "rd.",
+  "road",
+  "st",
+  "st.",
+  "street",
+  "'",
+  "-"
+)
+
+hhmatchable <- households |>
+  filter(!is.na(address)) |>
+  select(hhname, hhaccountid, address, city, state) |>
+  mutate(across(c(address, city, state), str_to_lower)) |>
+  mutate(
+    address = remove_any(address, drops),
+    address = str_remove_all(address, " "),
+    address = str_remove(address, "\\."),
+    match = paste(address, city, state, sep = "-")
+  )
+hhmatchable
+
+acctmatchable <- accounts |>
+  filter(type == "Individual", !is.na(address)) |>
+  select(acctname, accountid, address, city, state) |>
+  mutate(across(c(address, city, state), str_to_lower)) |>
+  mutate(
+    address = remove_any(address, drops),
+    address = str_remove_all(address, " "),
+    address = str_remove(address, "\\."),
+    match = paste(address, city, state, sep = "-")
+  )
+acctmatchable
+
+address_matches <- left_join(
+  hhmatchable |> select(hhname, hhaccountid, match),
+  acctmatchable |> select(acctname, accountid, match),
+  relationship = "many-to-many",
+  by = join_by(match)
 ) |>
-  mutate(nrecs = n(), .by = c(address, city, state, zip, country))
+  mutate(primary = hhaccountid == accountid) |>
+  arrange(hhaccountid, desc(primary), accountid) |>
+  mutate(
+    nrecs = n(),
+    primary == hhaccountid == accountid,
+    recnum = row_number(),
+    .by = hhaccountid
+  )
 
-tmp <- mrg1 |>
-  select(hhaccountid, accountid, nrecs, hhncontacts, everything()) |>
-  arrange(country, zip, state, city, address)
+count(address_matches, nrecs)
 
+address_matches |>
+  filter(nrecs == 1, hhaccountid != accountid) # good - no one!
+
+saveRDS(address_matches, fs::path(rds, "hhindiv_matches.rds"))
 
 ```
-
-
 
 ## Analysis
 
 ```{r}
 
 accounts <- readRDS(fs::path(rds, "accounts.rds"))
+hholds <- readRDS(fs::path(rds, "households.rds"))
+donations <- readRDS(fs::path(rds, "donations.rds"))
 
 ```
 
-
 ## Explore
-
 
 ```{r}
 
@@ -182,39 +226,6 @@ count(accounts, state, sort = TRUE) |> mutate(pct = n / sum(n))
 count(accounts, source, sort = TRUE) |> mutate(pct = n / sum(n))
 count(accounts, ocategory, sort = TRUE) |> mutate(pct = n / sum(n))
 count(accounts, odetail, sort = TRUE) |> mutate(pct = n / sum(n))
-
-```
-
-
-
-```{r}
-
-fname <- "donations_2025-07-16.csv"
-
-donors1 <- vroom(
-  fs::path(hhdr, fname),
-  col_types = cols(.default = col_character())
-)
-skimr::skim(donors1)
-glimpse(donors1)
-
-donors2 <- donors1 |>
-  rename_with(.fn = tolower) |>
-  rename(
-    name = 1,
-    accountid = 2,
-    date = `donated on`,
-    sysupdate = `system updates`,
-    sysmessages = `system messages`
-  ) |>
-  select(-...15) |>
-  mutate(amount1 = as.numeric(amount), date = lubridate::mdy(date))
-
-skimr::skim(donors2)
-
-donors3 <- donors2 |>
-  select(-amount) |>
-  rename(amount = amount1)
 
 ```
 

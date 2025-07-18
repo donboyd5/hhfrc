@@ -125,7 +125,82 @@ saveRDS(link4, fs::path(rds, "linkages.rds"))
 ### Accounts data
 
 ```{r}
-#| label: accounts
+#| label: accounts-data
+
+acctfnames <- c(
+  "accounts_individuals_2025-07-18.csv",
+  "accounts_companies_2025-07-18.csv"
+)
+acctpaths <- fs::path(neon, acctfnames)
+
+acct1 <- vroom(
+  acctpaths,
+  col_types = cols(.default = col_character())
+)
+skimr::skim(acct1)
+glimpse(acct1)
+cbind(1:ncol(acct1), names(acct1))
+
+acct2 <- acct1 |>
+  rename_with(.fn = tolower) |>
+  select(
+    accttype = 1,
+    accountid = 2,
+    hhid = 3,
+    actcontactid = 4, # drop, .02% complete
+    activityid = 5, # drop, .02% complete
+    companyid = 6,
+    groupid = 7,
+    importid = 8, # drop, only 2 values, don't know what it is
+    hhname = 9,
+    fullname = 10,
+    companyname = 11,
+    fulladdress = 12,
+    city = 13,
+    state = 14,
+    email1 = 15,
+    contact_type = 16,
+    donotcontact = 17, # make logical
+    deceased = 18, # make logical
+    acctnote = 19,
+    partnerchild = 20,
+    regtotal = 21, # make numeric
+    donatetotal = 22, # make numeric
+    gender = 23, # drop 98% missing
+    junk = 24 # drop all missing
+  )
+
+glimpse(acct2)
+skim(acct2)
+
+count(acct2, accttype)
+#   accttype       n
+#   <chr>      <int>
+# 1 Company      291
+# 2 Individual  4511
+
+count(acct2, importid)
+count(acct2, accttype, contact_type) # 8 company types, 2 individual types, but 11 of 12 are in individual account types
+count(acct2, donotcontact)
+count(acct2, deceased)
+
+acct3 <- acct2 |>
+  select(-c(actcontactid, activityid, importid, gender, junk)) |>
+  mutate(
+    donotcontact = donotcontact == "Yes",
+    deceased = deceased == "Yes",
+    regtotal = as.numeric(regtotal),
+    donatetotal = as.numeric(donatetotal)
+  )
+
+skim(acct3)
+
+saveRDS(acct3, fs::path(rds, "accounts.rds"))
+
+```
+
+```{r}
+#| label: OLD-accounts
 #| eval: false
 
 acctfname <- "accounts_2025-07-16.csv"
@@ -151,7 +226,7 @@ accounts <- accounts1 |>
   select(-...20)
 skimr::skim(accounts)
 
-saveRDS(accounts, fs::path(rds, "accounts.rds"))
+# saveRDS(accounts, fs::path(rds, "accounts.rds"))
 
 ```
 
@@ -182,14 +257,13 @@ donors2 <- donors1 |>
     sysmessages = `system messages`
   ) |>
   select(-...15) |>
-  mutate(amount1 = as.numeric(amount), date = lubridate::mdy(date))
+  mutate(donation = as.numeric(amount), date = lubridate::mdy(date))
 
 skimr::skim(donors2)
+glimpse(donors2)
 
 donors3 <- donors2 |>
-  select(-amount) |>
-  rename(amount = amount1)
-
+  select(-amount)
 glimpse(donors3)
 count(donors3, type)
 saveRDS(donors3, fs::path(rds, "donations.rds"))
@@ -258,7 +332,7 @@ regs3 <- regs2 |>
 skimr::skim(regs3)
 glimpse(regs3)
 
-count(regs3, event, sort=TRUE) # 1.9k events none missing!
+count(regs3, event, sort = TRUE) # 1.9k events none missing!
 count(regs3, notes) # ~ 41 notes, rest are NA
 count(regs3, payment) # 137 varieties
 count(regs3, type)
@@ -268,7 +342,7 @@ count(regs3, type)
 count(regs3, campaign) # 33 campaigns noted; 37k recs are NA
 count(regs3, type)
 
-events <- count(regs3, event, sort=TRUE) # 1.9k events none missing!
+events <- count(regs3, event, sort = TRUE) # 1.9k events none missing!
 
 saveRDS(regs3, fs::path(rds, "registrations.rds"))
 
@@ -300,20 +374,47 @@ We are looking for contact family name, total giving all time, last gift date, l
 ```{r}
 
 glimpse(donations)
+skim(donations)
+count(donations, type)
+count(donations, fund)
+count(donations, purpose)
+count(donations, source) # prob not needed
 
-df1 <- donations |> 
-  right_join(accounts |> filter(type=="Individual") |> select(accountid, acctname2=acctname), by = join_by(accountid))
-  filter(type=="DONATION") |> # exclude pledges
-  summarise(amount = sum(amount), .by=c(accountid, acctname))
+don1 <- donations |>
+  filter(type == "DONATION", status == "SUCCEEDED") |>
+  filter(accountid != "36805") |> # cash and miscellaneous credit card transactions
+  select(accountid, acctname, date, donation) |> # campaign, fund, purpose, 
+  left_join(accounts |> select(accountid, accttype, hhid, hhname), by = join_by(accountid)) |> 
+  filter(accttype=="Individual") |> 
+  mutate(hhfy=ifelse(month(date)>=7, year(date)+1, year(date)),
+         hhid=ifelse(is.na(hhid), paste0("h_", accountid),hhid),
+         hhname=ifelse(is.na(hhname), paste0("h_", acctname), hhname))
+skim(don1)
 
-df2 <- donations |> 
-  filter(type=="DONATION") |>  # exclude pledges
-  left_join(accounts |> 
-    select(accountid, acctname2=acctname, atype=type),
-    by = join_by(accountid)) |>
-      filter(atype=="Individual") |> 
-    summarise(amount = sum(amount), .by=c(accountid, acctname)) |> 
-  arrange(desc(amount))
+# group by hh and hhfy
+donfy <- don1 |> 
+  summarise(donation=sum(donation),
+            .by=c(hhid, hhname, hhfy))
+
+donsums <- donfy |>
+  summarise(total=sum(donation),
+            before_2021=sum(donation * (hhfy<2021)),
+            since_2021=sum(donation * (hhfy >=2021)),
+            .by=c(hhid, hhname))
+
+donfywide <- donfy |> 
+  pivot_wider(names_from = hhfy, values_from = donation, values_fill = 0)
+
+donfinal <- donsums |> 
+  left_join(donfywide |> 
+  select(hhid, hhname, `2021`:`2026`),
+            by = join_by(hhid, hhname)) |> 
+  mutate(pct_total=total / sum(total),
+         pct_2021plus = since_2021 / sum(since_2021)) |> 
+  relocate(pct_total, pct_2021plus, .after=since_2021) |> 
+  arrange(desc(total))
+
+donfinal
 
 
 

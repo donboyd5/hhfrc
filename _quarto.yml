@@ -16,7 +16,7 @@ book:
   date-format: long
   chapters:
     - index.qmd
-    - explore.qmd
+    - analysis.qmd
 
 format:
   html:

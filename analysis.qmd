@@ -327,13 +327,17 @@ saveRDS(don3, fs::path(rds, "donations_no_hhid.rds"))
 
 ```
 
-## Add household IDs to donations data TO COME
+### Add household IDs to donations data TO COME
 
 
 ### Registrations data
 
+Currently this comes from exporting Events data. Done for 2 time periods separately because of neon limits on # of records that can be exported -- 2011 through 2019 calendar years, and 2020 forward.
+
+TODO: Look for whether it would be better to create a report for this.
+
 ```{r}
-#| label: registrations
+#| label: registrations-from-expot
 #| eval: false
 
 regfnames <- c(

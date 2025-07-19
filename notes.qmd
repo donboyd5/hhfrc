@@ -1,0 +1,13 @@
+---
+editor_options:
+  chunk_output_type: console
+---
+
+# Notes to self
+
+## Linking households and individuals
+
+-   Create new Communication and Mailing Report, subtype Additional Contact Report -- has all contacts, in separate rows
+    -   Add all address info
+    -   All account ids
+    -   Requires criteria to run, so select expansive criteria -- I chose Main account is not blank

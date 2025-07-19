@@ -8,3 +8,18 @@ editor_options:
 
 ## TODO:
 
+## About the Neon data
+
+Main data we currently have access to:
+
+-   Accounts
+    - identifying info on every "account" (Individual or Company) who's had contact with Hubbard Hall through donations, attending performances, or participating in classes
+    - includes people who have died, moved out of the area, or lost all interest in HH so needs to be filtered
+    - Judy fills out fields for "deceased" and "do not contact" which allows filtering
+    - fields include id #; type (Individual or Company); primary person's address, email & phone; when record created
+
+-  Households
+    - defines 
+    
+
+

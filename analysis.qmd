@@ -1,0 +1,426 @@
+---
+format:
+  html:
+    toc: true
+    toc-depth: 4
+    page-layout: full
+---
+
+# Analysis
+
+"Our goal is to define the top 20% of all Hubbard Hall donors from the past 11 years (I think that was how far back we said this went) and then also from the past 5 years.
+
+We are looking for contact family name, total giving all time, last gift date, last FY total giving amount, and for the top 20% a breakdown of what their gift categories were (we want a complete donor profile, so for each donor we want to see the total contribution amount that includes donations, class purchases, ticket buys, etc.)
+
+We have a couple of questions for Judy additionally, that may be answered after Don has a go. Namely, we are looking for where Sue's donations from Opus live, and also where Kathy Rhoome's donations live to make sure that donations like these are included in the total.  Also, we want to find out if there is a way to link businesses who give to individuals who exist in the database as a soft credit?  This doesn't apply to all businesses, but for example, is MSK linked to Jason in a way where you can pull total giving for an individual and see his corporate contributions as well?"
+
+
+## Setup
+
+```{r}
+#| label: setup
+
+source(here::here("libraries.R"))
+
+hhdr <- here::here("data-raw")
+neon <- fs::path(hhdr, "neon")
+judy <- fs::path(hhdr, "judy")
+rds <- fs::path(hhdr, "rds")
+
+```
+
+## Get and save data
+
+### Household linkage
+
+Linkages obtained from "Don's all-contacts report", an Additional Contact Report; run on 2025-07-18.
+
+```{r}
+#| label: linkages
+#| eval: false
+
+linkfname <- "additional_contacts_linkage_2025-07-18.csv"
+
+link1 <- vroom(
+  fs::path(neon, linkfname),
+  col_types = cols(.default = col_character())
+)
+skim(link1)
+glimpse(link1)
+
+link2 <- link1 |>
+  select(
+    hhid = 1,
+    contactid = 2,
+    mainid = 3,
+    primaryid = 4,
+    pname = 5,
+    accttype = 6,
+    contacttype = 7,
+    indivtype = 8,
+    hhname = 9,
+    members = 10,
+    hhaddr1 = 11,
+    hhaddr2 = 12,
+    hhaddr3 = 13,
+    hhaddr4 = 14,
+    hhcity = 15,
+    hhcounty = 16,
+    hhstate = 17,
+    hhzip = 18,
+    hhaddress = 19,
+    relationship = 20,
+    prefname = 21,
+    salutation = 22,
+    deceased = 23,
+    dod = 24,
+    cdonations = 25,
+    junk = 26
+  )
+
+cbind(names(link1), names(link2))
+glimpse(link2)
+count(link2, accttype) # Individual, Household Contact Record; Company, Company Contact Record
+count(link2, contacttype) # Household Contact, Primary Household Contact; Company, c Contact, c Primary Contact
+count(link2, indivtype) # potentially useful but most are NA
+count(link2, deceased) # 47 yes
+
+link3 <- link2 |>
+  select(
+    hhid,
+    mainid,
+    primaryid,
+    contactid,
+    pname,
+    hhname,
+    accttype,
+    contacttype,
+    members,
+    hhaddr1,
+    hhaddr2,
+    hhcity,
+    hhstate,
+    hhzip,
+    relationship,
+    prefname,
+    deceased,
+    cdonations
+  ) |>
+  mutate(donations = readr::parse_number(cdonations))
+
+# check to be sure all looks good, especially donations parsing
+skim(link3)
+glimpse(link3)
+
+link4 <- link3 |>
+  select(-cdonations) |>
+  arrange(as.numeric(hhid), primaryid, contactid)
+
+# TODO? Come back and get full proper name of each household member - must be in the data
+
+saveRDS(link4, fs::path(rds, "linkages.rds"))
+
+```
+
+### Accounts data
+
+```{r}
+#| label: accounts-data
+
+acctfnames <- c(
+  "accounts_individuals_2025-07-18.csv",
+  "accounts_companies_2025-07-18.csv"
+)
+acctpaths <- fs::path(neon, acctfnames)
+
+acct1 <- vroom(
+  acctpaths,
+  col_types = cols(.default = col_character())
+)
+skimr::skim(acct1)
+glimpse(acct1)
+cbind(1:ncol(acct1), names(acct1))
+
+acct2 <- acct1 |>
+  rename_with(.fn = tolower) |>
+  select(
+    accttype = 1,
+    accountid = 2,
+    hhid = 3,
+    actcontactid = 4, # drop, .02% complete
+    activityid = 5, # drop, .02% complete
+    companyid = 6,
+    groupid = 7,
+    importid = 8, # drop, only 2 values, don't know what it is
+    hhname = 9,
+    fullname = 10,
+    companyname = 11,
+    fulladdress = 12,
+    city = 13,
+    state = 14,
+    email1 = 15,
+    contact_type = 16,
+    donotcontact = 17, # make logical
+    deceased = 18, # make logical
+    acctnote = 19,
+    partnerchild = 20,
+    regtotal = 21, # make numeric
+    donatetotal = 22, # make numeric
+    gender = 23, # drop 98% missing
+    junk = 24 # drop all missing
+  )
+
+glimpse(acct2)
+skim(acct2)
+
+count(acct2, accttype)
+#   accttype       n
+#   <chr>      <int>
+# 1 Company      291
+# 2 Individual  4511
+
+count(acct2, importid)
+count(acct2, accttype, contact_type) # 8 company types, 2 individual types, but 11 of 12 are in individual account types
+count(acct2, donotcontact)
+count(acct2, deceased)
+
+acct3 <- acct2 |>
+  select(-c(actcontactid, activityid, importid, gender, junk)) |>
+  mutate(
+    donotcontact = donotcontact == "Yes",
+    deceased = deceased == "Yes",
+    regtotal = as.numeric(regtotal),
+    donatetotal = as.numeric(donatetotal)
+  )
+
+skim(acct3)
+
+saveRDS(acct3, fs::path(rds, "accounts.rds"))
+
+```
+
+```{r}
+#| label: OLD-accounts
+#| eval: false
+
+acctfname <- "accounts_2025-07-16.csv"
+
+accounts1 <- vroom(
+  fs::path(neon, acctfname),
+  col_types = cols(.default = col_character())
+)
+glimpse(accounts1)
+
+accounts <- accounts1 |>
+  rename_with(.fn = tolower) |>
+  rename(
+    acctname = account,
+    accountid = id,
+    subtype = 4,
+    pcontact = `primary contact`,
+    zip = `zip code`,
+    created = `created on`,
+    ocategory = `origin category`,
+    odetail = `origin detail`
+  ) |>
+  select(-...20)
+skimr::skim(accounts)
+
+# saveRDS(accounts, fs::path(rds, "accounts.rds"))
+
+```
+
+
+### Donations data
+
+
+```{r}
+#| label: donations
+#| eval: false
+
+donorfname <- "donations_2025-07-16.csv"
+
+donors1 <- vroom(
+  fs::path(neon, donorfname),
+  col_types = cols(.default = col_character())
+)
+skimr::skim(donors1)
+glimpse(donors1)
+
+donors2 <- donors1 |>
+  rename_with(.fn = tolower) |>
+  rename(
+    acctname = 1,
+    accountid = 2,
+    date = `donated on`,
+    sysupdate = `system updates`,
+    sysmessages = `system messages`
+  ) |>
+  select(-...15) |>
+  mutate(donation = as.numeric(amount), date = lubridate::mdy(date))
+
+skimr::skim(donors2)
+glimpse(donors2)
+
+donors3 <- donors2 |>
+  select(-amount)
+glimpse(donors3)
+count(donors3, type)
+saveRDS(donors3, fs::path(rds, "donations.rds"))
+
+```
+
+### Registrations data
+
+```{r}
+#| label: registrations
+#| eval: false
+
+regfnames <- c(
+  "registrations_2011_through_2019.csv",
+  "registrations_2020_through_2025-07-17.csv"
+)
+regpaths <- fs::path(neon, regfnames)
+
+regs1 <- vroom(
+  regpaths,
+  col_types = cols(.default = col_character())
+)
+skimr::skim(regs1)
+glimpse(regs1)
+
+check <- regs1 |> distinct() |> nrow()
+nrow(regs1)
+check
+
+tmp <- regs1 |>
+  group_by_all() |>
+  filter(n() > 1) |>
+  ungroup()
+# ~ 7k duplicates, not obvious why, need to investigate -- some are without account ids and may be legitimate
+# KEEP DUPLICATES FOR NOW
+names(regs1)
+regs2 <- regs1 |>
+  rename_with(.fn = tolower) |>
+  select(
+    accountid = 1,
+    acctname = 2,
+    amount,
+    event,
+    notes,
+    startdate = `starts on`,
+    payment,
+    createdate = `created date`,
+    lastdate = `last modified date`,
+    lastmodby = `last modified by`,
+    type,
+    sysupdt = `system updates`,
+    campaign,
+    regdate = `registered on`,
+    status
+  )
+
+skimr::skim(regs2)
+glimpse(regs2)
+
+regs3 <- regs2 |>
+  mutate(
+    across(contains("date"), \(x) lubridate::mdy(x)),
+    amount = parse_number(amount)
+  )
+
+skimr::skim(regs3)
+glimpse(regs3)
+
+count(regs3, event, sort = TRUE) # 1.9k events none missing!
+count(regs3, notes) # ~ 41 notes, rest are NA
+count(regs3, payment) # 137 varieties
+count(regs3, type)
+# 1 Attendee              27953
+# 2 Registrant             7154
+# 3 Registrant & Attendee 18912
+count(regs3, campaign) # 33 campaigns noted; 37k recs are NA
+count(regs3, type)
+
+events <- count(regs3, event, sort = TRUE) # 1.9k events none missing!
+
+saveRDS(regs3, fs::path(rds, "registrations.rds"))
+
+```
+
+### Classify registrations by major and minor categories
+
+
+## Analysis
+
+```{r}
+#| label: get-data
+
+linkages <- readRDS(fs::path(rds, "linkages.rds"))
+accounts <- readRDS(fs::path(rds, "accounts.rds"))
+donations <- readRDS(fs::path(rds, "donations.rds"))
+registrations <- readRDS(fs::path(rds, "registrations.rds"))
+
+```
+
+Our goal is to define the top 20% of all Hubbard Hall donors from the past 11 years (I think that was how far back we said this went) and then also from the past 5 years.
+
+We are looking for contact family name, total giving all time, last gift date, last FY total giving amount, and for the top 20% a breakdown of what their gift categories were (we want a complete donor profile, so for each donor we want to see the total contribution amount that includes donations, class purchases, ticket buys, etc.)
+
+
+### Top 20% all years
+
+
+```{r}
+
+glimpse(donations)
+skim(donations)
+count(donations, type)
+count(donations, fund)
+count(donations, purpose)
+count(donations, source) # prob not needed
+
+don1 <- donations |>
+  filter(type == "DONATION", status == "SUCCEEDED") |>
+  filter(accountid != "36805") |> # cash and miscellaneous credit card transactions
+  select(accountid, acctname, date, donation) |> # campaign, fund, purpose, 
+  left_join(accounts |> select(accountid, accttype, hhid, hhname), by = join_by(accountid)) |> 
+  filter(accttype=="Individual") |> 
+  mutate(hhfy=ifelse(month(date)>=7, year(date)+1, year(date)),
+         hhid=ifelse(is.na(hhid), paste0("h_", accountid),hhid),
+         hhname=ifelse(is.na(hhname), paste0("h_", acctname), hhname))
+skim(don1)
+
+# group by hh and hhfy
+donfy <- don1 |> 
+  summarise(donation=sum(donation),
+            .by=c(hhid, hhname, hhfy))
+
+donsums <- donfy |>
+  summarise(total=sum(donation),
+            before_2021=sum(donation * (hhfy<2021)),
+            since_2021=sum(donation * (hhfy >=2021)),
+            .by=c(hhid, hhname))
+
+donfywide <- donfy |> 
+  pivot_wider(names_from = hhfy, values_from = donation, values_fill = 0)
+
+donfinal <- donsums |> 
+  left_join(donfywide |> 
+  select(hhid, hhname, `2021`:`2026`),
+            by = join_by(hhid, hhname)) |> 
+  mutate(pct_total=total / sum(total),
+         pct_2021plus = since_2021 / sum(since_2021)) |> 
+  relocate(pct_total, pct_2021plus, .after=since_2021) |> 
+  arrange(desc(total))
+
+donfinal
+
+
+
+```
+
+### Top 20% 5 years
+
+
+

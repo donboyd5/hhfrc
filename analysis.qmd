@@ -46,15 +46,34 @@ Map my variable names to neon names so that I have consistent names across files
 
 # registrations: "Account ID","Account Name","Amount","Event","Notes","Starts On","Payment","Created Date","Created By","Last Modified Date","Last Modified By","Type","System Updates","Campaign","Registered On","Status"
 
-# donations: "Household Name","Donation ID","Account ID","Shopping Cart ID","Campaign ID","Donation Amount","Donation Date","Account Type","Full Name (F)","Company Name","City","Address Line 1","State/Province","Zip Code","Campaign Name","Purpose","Fund","Tender Type","Tribute Full Name (F)","DAFpay Advisor Account ID","DAFpay Advisor Account Name","DAFpay Grant ID","DAFpay Note","DAFpay Status","Deceased","Do Not Contact",
+# donations: "Household Name","Donation ID","Account ID","Shopping Cart ID","Campaign ID","Donation Amount","Donation Date","Account Type","Full Name (F)","Company Name","City","Address Line 1","State/Province","Zip Code","Campaign Name","Purpose","Fund","Tender Type","Tribute Full Name (F)","DAFpay Advisor Account ID","DAFpay Advisor Account Name","DAFpay Grant ID","DAFpay Note","DAFpay Status","Deceased","Do Not Contact"
+
+# accounts: "Account Type","Account ID","Household ID","Activity Contact Account ID","Activity ID","Company ID","Group Primary Member ID","Import ID","Household Name","Full Name (F)","Company Name","Full Street Address (F)","City","State/Province","Email 1","Contact Type","Do Not Contact","Deceased","Account Note","Partner and Children (C)","All Registration Amount","All Donation Amount","Gender",
+
+# put major id information first and then have blocks for different kinds of variables
 
 vnames <- read_csv(
   "vname, neon, sources  
-  hhname, Household Name, donor
+  hhid, Household ID, accounts
+  hhname, Household Name, donor-accounts
+  groupaccountid, Group Primary Member ID, accounts
+  partnerchild, Partner and Children (C), accounts
+  gender, Gender, accounts
+
   accountid, Account ID, donor
   account_type, Account Type, donor 
-  deceased, Deceased, donor
-  donotcontact, Do Not Contact, donor
+  companyid, Company ID, accounts
+  company_name, Company Name, donor-accounts
+
+  deceased, Deceased, donor-accounts
+  donotcontact, Do Not Contact, donor-accounts
+
+  activity_contactid, Activity Contact Account ID, accounts
+  importid, Import ID, accounts
+  contact_type, Contact Type, accounts
+  account_note, Account Note, accounts
+  reg_allamount, All Registration Amount, accounts
+  donation_allamount, All Donation Amount, accounts
 
   shopcartid, Shopping Cart ID, donor
   campaignid, Campaign ID, donor
@@ -63,12 +82,12 @@ vnames <- read_csv(
   fund, Fund, donor
   tender, Tender Type, donor
 
-  fullname, Full Name (F), donor
-  company_name, Company Name, donor
+  fullname, Full Name (F), donor-accounts
   city, City, donor
   address1, Address Line 1, donor
   state, State/Province, donor
   zip, Zip Code, donor
+  email1, Email 1, accounts
 
   donation, Donation Amount, donor
   donationid, Donation ID, donor  
@@ -85,7 +104,6 @@ vnames
 
 lookup <- deframe(vnames[, c("vname", "neon")])
 lookup
-
 
 ```
 
@@ -182,8 +200,13 @@ saveRDS(link4, fs::path(rds, "linkages.rds"))
 
 ### Accounts data
 
+Get data from neon:
+
+-   "Don's all-accounts report" -- an All Accounts Report
+-   Run separately for individuals and companies and combine
+
 ```{r}
-#| label: accounts-data
+#| label: accounts-data-from-neon-report
 
 acctfnames <- c(
   "accounts_individuals_2025-07-18.csv",
@@ -193,11 +216,27 @@ acctpaths <- fs::path(neon, acctfnames)
 
 acct1 <- vroom(
   acctpaths,
-  col_types = cols(.default = col_character())
+  col_types = cols(.default = col_character()),
+  id = "fname"
 )
 skimr::skim(acct1)
 glimpse(acct1)
 cbind(1:ncol(acct1), names(acct1))
+
+
+nrows <- acct1 |> distinct() |> nrow()
+
+lookup <- deframe(vnames[, c("vname", "neon")])
+lookup
+acct2 <- acct1 |>
+  rename(any_of(lookup)) |>
+  mutate(
+    account_type = case_when(
+      str_detect(fname, "individuals") ~ "Individual",
+      str_detect(fname, "companies") ~ "Company",
+      .default = "ERROR"
+    )
+  )
 
 acct2 <- acct1 |>
   rename_with(.fn = tolower) |>

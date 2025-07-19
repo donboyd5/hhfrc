@@ -31,6 +31,64 @@ rds <- fs::path(hhdr, "rds")
 
 ## Get and save data
 
+### Define variable mapping
+
+Map my variable names to neon names so that I have consistent names across files.
+
+```{r}
+#| label: variable-mapping
+
+# lookup <- c(pl = "Petal.Length", sl = "Sepal.Length")
+# rename(iris, all_of(lookup)) # use any_of() if some are not in the data
+
+# create a lookup vector from a tibble:
+# lookup <- deframe(vnames[, c("newname", "oldname")])
+
+# registrations: "Account ID","Account Name","Amount","Event","Notes","Starts On","Payment","Created Date","Created By","Last Modified Date","Last Modified By","Type","System Updates","Campaign","Registered On","Status"
+
+# donations: "Household Name","Donation ID","Account ID","Shopping Cart ID","Campaign ID","Donation Amount","Donation Date","Account Type","Full Name (F)","Company Name","City","Address Line 1","State/Province","Zip Code","Campaign Name","Purpose","Fund","Tender Type","Tribute Full Name (F)","DAFpay Advisor Account ID","DAFpay Advisor Account Name","DAFpay Grant ID","DAFpay Note","DAFpay Status","Deceased","Do Not Contact",
+
+vnames <- read_csv(
+  "vname, neon, sources  
+  hhname, Household Name, donor
+  accountid, Account ID, donor
+  account_type, Account Type, donor 
+  deceased, Deceased, donor
+  donotcontact, Do Not Contact, donor
+
+  shopcartid, Shopping Cart ID, donor
+  campaignid, Campaign ID, donor
+  campaign, Campaign Name, donor
+  purpose, Purpose, donor
+  fund, Fund, donor
+  tender, Tender Type, donor
+
+  fullname, Full Name (F), donor
+  company_name, Company Name, donor
+  city, City, donor
+  address1, Address Line 1, donor
+  state, State/Province, donor
+  zip, Zip Code, donor
+
+  donation, Donation Amount, donor
+  donationid, Donation ID, donor  
+  donation_date, Donation Date, donor  
+  tribute_fullname, Tribute Full Name (F), donor  
+  dafadvisorid, DAFpay Advisor Account ID, donor
+  dafadvisorname, DAFpay Advisor Account Name, donor
+  dafgrantid, DAFpay Grant ID, donor
+  dafstatus, DAFpay Status, donor
+  dafnote, DAFpay Note, donor
+  "
+)
+vnames
+
+lookup <- deframe(vnames[, c("vname", "neon")])
+lookup
+
+
+```
+
 ### Household linkage
 
 Linkages obtained from "Don's all-contacts report", an Additional Contact Report; run on 2025-07-18.

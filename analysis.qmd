@@ -291,42 +291,58 @@ skimr::skim(accounts)
 
 ### Donations data
 
+Donations from neon -- "Don's donation details report". Run once for Individuals and once for Companies, then combine below.
+
+-   includes most ids but not household id. However, it has household name. We need to match this against a linkage file to get 
+-   includes deceased and do not contact
+-   Donations can include Donations, Pledges, Pledge Payments, and Matching Pledges
 
 ```{r}
-#| label: donations
-#| eval: false
+#| label: donations-from-neon-report
 
-donorfname <- "donations_2025-07-16.csv"
-
-donors1 <- vroom(
-  fs::path(neon, donorfname),
-  col_types = cols(.default = col_character())
+dfnames <- c(
+  "donations_detail_individuals_2025-07-18.csv",
+  "donations_detail_companies_2025-07-18.csv"
 )
-skimr::skim(donors1)
-glimpse(donors1)
 
-donors2 <- donors1 |>
-  rename_with(.fn = tolower) |>
-  rename(
-    acctname = 1,
-    accountid = 2,
-    date = `donated on`,
-    sysupdate = `system updates`,
-    sysmessages = `system messages`
-  ) |>
-  select(-...15) |>
-  mutate(donation = as.numeric(amount), date = lubridate::mdy(date))
+dpaths <- fs::path(neon, dfnames)
 
-skimr::skim(donors2)
-glimpse(donors2)
+don1 <- vroom(
+  dpaths,
+  col_types = cols(.default = col_character()),
+  id = "fname"
+)
+skimr::skim(don1)
+glimpse(don1)
 
-donors3 <- donors2 |>
-  select(-amount)
-glimpse(donors3)
-count(donors3, type)
-saveRDS(donors3, fs::path(rds, "donations.rds"))
+nrows <- don1 |> distinct() |> nrow()
+
+lookup <- deframe(vnames[, c("vname", "neon")])
+lookup
+don2 <- don1 |>
+  rename(any_of(lookup)) |>
+  mutate(
+    account_type = case_when(
+      str_detect(fname, "individuals") ~ "Individual",
+      str_detect(fname, "companies") ~ "Company",
+      .default = "ERROR"
+    )
+  )
+glimpse(don2)
+count(don2, fname, account_type)
+
+don3 <- don2 |>
+  select(-c(starts_with("..."), fname)) |>
+  mutate(donation = parse_number(donation)) # the fields that cause problems are shown as NA in the source data, so ok
+
+glimpse(don3)
+skim(don3)
+
+saveRDS(don3, fs::path(rds, "donations_no_hhid.rds"))
 
 ```
+
+
 
 ### Registrations data
 
@@ -441,40 +457,48 @@ count(donations, source) # prob not needed
 don1 <- donations |>
   filter(type == "DONATION", status == "SUCCEEDED") |>
   filter(accountid != "36805") |> # cash and miscellaneous credit card transactions
-  select(accountid, acctname, date, donation) |> # campaign, fund, purpose, 
-  left_join(accounts |> select(accountid, accttype, hhid, hhname), by = join_by(accountid)) |> 
-  filter(accttype=="Individual") |> 
-  mutate(hhfy=ifelse(month(date)>=7, year(date)+1, year(date)),
-         hhid=ifelse(is.na(hhid), paste0("h_", accountid),hhid),
-         hhname=ifelse(is.na(hhname), paste0("h_", acctname), hhname))
+  select(accountid, acctname, date, donation) |> # campaign, fund, purpose,
+  left_join(
+    accounts |> select(accountid, accttype, hhid, hhname),
+    by = join_by(accountid)
+  ) |>
+  filter(accttype == "Individual") |>
+  mutate(
+    hhfy = ifelse(month(date) >= 7, year(date) + 1, year(date)),
+    hhid = ifelse(is.na(hhid), paste0("h_", accountid), hhid),
+    hhname = ifelse(is.na(hhname), paste0("h_", acctname), hhname)
+  )
 skim(don1)
 
 # group by hh and hhfy
-donfy <- don1 |> 
-  summarise(donation=sum(donation),
-            .by=c(hhid, hhname, hhfy))
+donfy <- don1 |>
+  summarise(donation = sum(donation), .by = c(hhid, hhname, hhfy))
 
 donsums <- donfy |>
-  summarise(total=sum(donation),
-            before_2021=sum(donation * (hhfy<2021)),
-            since_2021=sum(donation * (hhfy >=2021)),
-            .by=c(hhid, hhname))
+  summarise(
+    total = sum(donation),
+    before_2021 = sum(donation * (hhfy < 2021)),
+    since_2021 = sum(donation * (hhfy >= 2021)),
+    .by = c(hhid, hhname)
+  )
 
-donfywide <- donfy |> 
+donfywide <- donfy |>
   pivot_wider(names_from = hhfy, values_from = donation, values_fill = 0)
 
-donfinal <- donsums |> 
-  left_join(donfywide |> 
-  select(hhid, hhname, `2021`:`2026`),
-            by = join_by(hhid, hhname)) |> 
-  mutate(pct_total=total / sum(total),
-         pct_2021plus = since_2021 / sum(since_2021)) |> 
-  relocate(pct_total, pct_2021plus, .after=since_2021) |> 
+donfinal <- donsums |>
+  left_join(
+    donfywide |>
+      select(hhid, hhname, `2021`:`2026`),
+    by = join_by(hhid, hhname)
+  ) |>
+  mutate(
+    pct_total = total / sum(total),
+    pct_2021plus = since_2021 / sum(since_2021)
+  ) |>
+  relocate(pct_total, pct_2021plus, .after = since_2021) |>
   arrange(desc(total))
 
 donfinal
-
-
 
 ```
 

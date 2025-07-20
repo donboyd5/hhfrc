@@ -271,7 +271,8 @@ don2 <- don1 |>
       str_detect(fname, "individuals") ~ "Individual",
       str_detect(fname, "companies") ~ "Company",
       .default = "ERROR"
-    )
+    ),
+    donation_date = mdy(donation_date)
   )
 glimpse(don2)
 count(don2, fname, account_type)

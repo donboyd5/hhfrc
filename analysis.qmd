@@ -48,6 +48,8 @@ Map my variable names to neon names so that I have consistent names across files
 
 # accounts: "Account Type","Account ID","Household ID","Activity Contact Account ID","Activity ID","Company ID","Group Primary Member ID","Import ID","Household Name","Full Name (F)","Company Name","Full Street Address (F)","City","State/Province","Email 1","Contact Type","Do Not Contact","Deceased","Account Note","Partner and Children (C)","All Registration Amount","All Donation Amount","Gender",
 
+# events: "Event ID"   "Event Name" "Category"   "Topic"      "Code"       "Attendees"  "Waitlisted" "Starts On"  "Status"     "Ends On"    "...11"
+
 # registrations: "Account ID","Account Name","Amount","Event","Notes","Starts On","Payment","Created Date","Created By","Last Modified Date","Last Modified By","Type","System Updates","Campaign","Registered On","Status"
 
 # put major id information first and then have blocks for different kinds of variables
@@ -101,103 +103,26 @@ vnames <- read_csv(
   dafgrantid, DAFpay Grant ID, donor
   dafstatus, DAFpay Status, donor
   dafnote, DAFpay Note, donor
+
+  eventid, Event ID, events
+  event_name, Event Name, events
+  event_category, Category, events
+  event_topic, Topic, events
+  event_code, Code, events
+  event_attendees, Attendees, events
+  event_waitlisted, Waitlisted, events
+  event_start, Starts On, events
+  event_end, Ends On, events
+  event_status, Status, events
+
   "
 )
 vnames
 
+# "Event ID"   "Event Name" "Category"   "Topic"      "Code"       "Attendees"  "Waitlisted" "Starts On"  "Status"     "Ends On"    "...11"
+
 lookup <- deframe(vnames[, c("vname", "neon")])
 lookup
-
-```
-
-### Household linkage -- REDO
-
-Linkages obtained from "Don's all-contacts report", an Additional Contact Report; run on 2025-07-18.
-
-```{r}
-#| label: linkages
-#| eval: false
-
-linkfname <- "additional_contacts_linkage_2025-07-18.csv"
-
-link1 <- vroom(
-  fs::path(neon, linkfname),
-  col_types = cols(.default = col_character())
-)
-skim(link1)
-glimpse(link1)
-
-link2 <- link1 |>
-  select(
-    hhid = 1,
-    contactid = 2,
-    mainid = 3,
-    primaryid = 4,
-    pname = 5,
-    accttype = 6,
-    contacttype = 7,
-    indivtype = 8,
-    hhname = 9,
-    members = 10,
-    hhaddr1 = 11,
-    hhaddr2 = 12,
-    hhaddr3 = 13,
-    hhaddr4 = 14,
-    hhcity = 15,
-    hhcounty = 16,
-    hhstate = 17,
-    hhzip = 18,
-    hhaddress = 19,
-    relationship = 20,
-    prefname = 21,
-    salutation = 22,
-    deceased = 23,
-    dod = 24,
-    cdonations = 25,
-    junk = 26
-  )
-
-cbind(names(link1), names(link2))
-glimpse(link2)
-count(link2, accttype) # Individual, Household Contact Record; Company, Company Contact Record
-count(link2, contacttype) # Household Contact, Primary Household Contact; Company, c Contact, c Primary Contact
-count(link2, indivtype) # potentially useful but most are NA
-count(link2, deceased) # 47 yes
-
-link3 <- link2 |>
-  select(
-    hhid,
-    mainid,
-    primaryid,
-    contactid,
-    pname,
-    hhname,
-    accttype,
-    contacttype,
-    members,
-    hhaddr1,
-    hhaddr2,
-    hhcity,
-    hhstate,
-    hhzip,
-    relationship,
-    prefname,
-    deceased,
-    cdonations
-  ) |>
-  mutate(donations = readr::parse_number(cdonations))
-
-# check to be sure all looks good, especially donations parsing
-skim(link3)
-glimpse(link3)
-
-link4 <- link3 |>
-  select(-cdonations) |>
-  arrange(as.numeric(hhid), primaryid, contactid)
-
-# TODO? Come back and get full proper name of each household member - must be in the data
-
-saveRDS(link4, fs::path(rds, "linkages.rds"))
 
 ```
 
@@ -273,14 +198,37 @@ saveRDS(acct3, fs::path(rds, "accounts.rds"))
 
 ```
 
+### Create household-account linkages file for individuals in accounts data
 
-### Donations data
+This linkage file only includes people with accounts. "Additional contacts" who do not have accounts (e.g., a child who attends classes) are not included in this file. 
 
-Donations from neon -- "Don's donation details report". Run once for Individuals and once for Companies, then combine below.
+TODO: Consider including information from "Don's all-contacts report", an Additional Contact Report; run on 2025-07-18.
+
+```{r}
+#| label: create-accounts
+
+accounts <- readRDS(fs::path(rds, "accounts.rds"))
+ns(accounts)
+
+linkages <- accounts |>
+  filter(account_type == "Individual") |>
+  select(hhid, hhname, accountid, fullname, fulladdress, city, state) |>
+  arrange(as.integer(hhid), as.integer(accountid))
+
+saveRDS(linkages, fs::path(rds, "linkages.rds"))
+
+```
+
+
+### Donations data from donation details report
+
+Donations from neon -- "Don's donation details report". We run the report once for Individuals and once for Companies because there does not seem to be a way to run it as a single report (?). Thus, we read the two separate reports and combine below.
 
 -   includes most ids but not household id. However, it has household name. We need to match this against a linkage file to get 
 -   includes deceased and do not contact
 -   Donations can include Donations, Pledges, Pledge Payments, and Matching Pledges
+
+Oddly, the donations details report include household name but it does not appear possible to also include household id. This prepare donations in two steps (1) get the donations data without household id, and (2) add household id from the linkages file.
 
 ```{r}
 #| label: donations-from-neon-report
@@ -327,8 +275,171 @@ saveRDS(don3, fs::path(rds, "donations_no_hhid.rds"))
 
 ```
 
-### Add household IDs to donations data TO COME
+### Add household IDs to donations data
 
+Add hhid from the linkages data
+
+```{r}
+#| label: donations-with-hhid
+
+donations_no_hhid <- readRDS(fs::path(rds, "donations_no_hhid.rds"))
+linkages <- readRDS(fs::path(rds, "linkages.rds"))
+
+glimpse(donations_no_hhid)
+ns(donations_no_hhid)
+ns(linkages)
+
+donations <- donations_no_hhid |>
+  left_join(
+    linkages |> select(hhname, hhid, accountid),
+    by = join_by(hhname, accountid)
+  ) |>
+  select(hhid, hhname, accountid, fullname, everything())
+
+glimpse(donations)
+
+saveRDS(donations, fs::path(rds, "donations.rds"))
+
+```
+
+## Events and events registrations
+
+"Events" is a neon catchall name that includes performances, classes, workshops, dinners and several other categories. Neon has an events file that can be downloaded with information on each event, including a category (performance, ...). I don't know yet how the categories are created or assigned, but I imagine Judy and possibly Erin do this.
+
+Neon does not appear to have reports that let us extract information about events so it looks like the thing to do is export the events table.
+
+### Events
+
+Get and save events "as-is". Then add a major category field.
+
+```{r}
+#| label: events-data
+
+efname <- "events_2025-07-20.csv"
+epath <- fs::path(neon, efname)
+
+ev1 <- vroom(epath, col_types = cols(.default = col_character()))
+skimr::skim(ev1)
+glimpse(ev1)
+ns(ev1)
+
+ev2 <- ev1 |>
+  rename(any_of(lookup))
+names(ev2)
+glimpse(ev2)
+count(ev2, event_topic) # has names of people for some events -- KEEP
+count(ev2, event_code) # don't know what it is, but not blank, appears to be a date -- KEEP
+count(ev2, event_attendees) # should be integer
+count(ev2, event_waitlisted) # "0" for all -- DROP
+count(ev2, event_start) # mm/dd/yyyy
+count(ev2, event_end) # mm/dd/yyyy
+count(ev2, event_status) # ACTIVE or INACTIVE -- KEEP
+skim(ev2)
+
+ev3 <- ev2 |>
+  select(-c(...11, event_waitlisted)) |>
+  mutate(
+    event_attendees = as.integer(event_attendees),
+    event_start = lubridate::mdy(event_start),
+    event_end = lubridate::mdy(event_end)
+  )
+glimpse(ev3)
+skim(ev3)
+ev3 |> filter(event_attendees == 406)
+count(ev3, event_category) # 43 categories; NA has 15 records
+
+saveRDS(ev3, fs::path(rds, "events_no_majorcat.rds"))
+
+```
+
+Add major category for events.
+
+```{r}
+#| label: events-majorcat
+
+evcat1 <- readRDS(fs::path(rds, "events_no_majorcat.rds"))
+count(evcat1, event_category)
+
+# major category: performance, classes, ?
+# minor category: music_mfs, music_other
+
+evcat2 <- evcat1 |>
+  mutate(
+    event_majorcat = case_when(
+      str_detect(event_category, "Performances") ~ "performance",
+      event_category %in% c("Shakespeare") ~ "performance",
+      event_category == "Children's Theater" &
+        str_detect(event_name, "Performance") &
+        !str_detect(event_name, "Performance Explorers") ~
+        "performance",
+      event_category == "Children's Theater" &
+        str_detect(event_name, "Showcase") ~
+        "performance",
+      event_category == "Children's Theater" &
+        str_detect(event_name, "SOLD OUT") ~
+        "performance",
+      event_name == "An Unforgettable Crooner Cabaret" ~ "performance",
+      str_detect(event_name, "Blues") & str_detect(event_name, "Brews") ~
+        "performance", # some oddball text
+
+      event_category %in%
+        c(
+          "Classes",
+          "Ballet",
+          "Bollywood & BollyX",
+          "Dance Workshops",
+          "Foil Fencing",
+          "Hip Hop",
+          "Irish Step Dance",
+          "Pilates/Yoga",
+          "Puppetry",
+          "Tap Dance",
+          "Visual Arts",
+          "Visual Arts - Crafts",
+          "Wellness",
+          "Workshops"
+        ) ~
+        "class",
+      str_detect(event_category, "Classes") ~ "class", # Only needed if catching partial matches
+      event_category == "Children's Theater" ~ "class", # CAUTION: requires that performances be filtered out above
+      event_category == "Chorale" ~ "class", # CAUTION: some might be performances
+      str_detect(event_category, "Martial Arts") ~ "class",
+
+      event_category %in%
+        c(
+          "Community Events",
+          "Curiosity Forum",
+          "Dinners",
+          "Exhibits, Films & Lectures",
+          "Film Screenings",
+          "Home & Garden",
+          "Literary"
+        ) ~
+        "community",
+      str_detect(event_name, "Community") ~ "community",
+      str_detect(event_name, "Holiday Breakfast") ~ "community",
+
+      event_category %in% c("Auditions") ~ "other",
+      str_detect(event_name, "Gala") ~ "other",
+      .default = "ERROR"
+    )
+  )
+
+count(evcat2, event_majorcat)
+tmp <- count(evcat2, event_majorcat, event_category, event_name)
+
+# mutate(event_majorcat = case_when(
+#   str_detect(event_category, "Music from Salem Performances") ~ "mfs",
+#   str_detect(event_category, )
+#   .default = "other"
+# )
+
+count(evcat2, event_majorcat)
+
+```
+
+
+## OLD BELOW HERE
 
 ### Registrations data
 

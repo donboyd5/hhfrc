@@ -16,6 +16,7 @@ book:
   date-format: long
   chapters:
     - index.qmd
+    - get_convert_and_save_data.qmd
     - analysis.qmd
 
 format:

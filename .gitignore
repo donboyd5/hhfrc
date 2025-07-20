@@ -15,9 +15,11 @@ _freeze/
 _web/
 data-raw/judy/
 data-raw/rds/
+libs/
 site_libs/
 
 # file types
+*.html
 *.xl*
 
 # files

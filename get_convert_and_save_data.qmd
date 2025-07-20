@@ -1,0 +1,637 @@
+---
+format:
+  html:
+    toc: true
+    toc-depth: 4
+    page-layout: full
+---
+
+# Get, convert, and save data
+
+## Setup
+
+```{r}
+#| label: setup
+
+source(here::here("libraries.R"))
+
+hhdr <- here::here("data-raw")
+neon <- fs::path(hhdr, "neon")
+judy <- fs::path(hhdr, "judy")
+rds <- fs::path(hhdr, "rds")
+
+```
+
+### Define variable mapping
+
+Map my variable names to neon names so that I have consistent names across files.
+
+```{r}
+#| label: variable-mapping
+
+# lookup <- c(pl = "Petal.Length", sl = "Sepal.Length")
+# rename(iris, all_of(lookup)) # use any_of() if some are not in the data
+
+# create a lookup vector from a tibble:
+# lookup <- deframe(vnames[, c("newname", "oldname")])
+
+# donations: "Household Name","Donation ID","Account ID","Shopping Cart ID","Campaign ID","Donation Amount","Donation Date","Account Type","Full Name (F)","Company Name","City","Address Line 1","State/Province","Zip Code","Campaign Name","Purpose","Fund","Tender Type","Tribute Full Name (F)","DAFpay Advisor Account ID","DAFpay Advisor Account Name","DAFpay Grant ID","DAFpay Note","DAFpay Status","Deceased","Do Not Contact"
+
+# accounts: "Account Type","Account ID","Household ID","Activity Contact Account ID","Activity ID","Company ID","Group Primary Member ID","Import ID","Household Name","Full Name (F)","Company Name","Full Street Address (F)","City","State/Province","Email 1","Contact Type","Do Not Contact","Deceased","Account Note","Partner and Children (C)","All Registration Amount","All Donation Amount","Gender",
+
+# events: "Event ID"   "Event Name" "Category"   "Topic"      "Code"       "Attendees"  "Waitlisted" "Starts On"  "Status"     "Ends On"    "...11"
+
+# registrations: "Account ID","Account Name","Amount","Event","Notes","Starts On","Payment","Created Date","Created By","Last Modified Date","Last Modified By","Type","System Updates","Campaign","Registered On","Status"
+
+# put major id information first and then have blocks for different kinds of variables
+
+# Status  can mean different things in different contexts so we may rename it to events_status, regs_status, etc.
+# Starts on and Ends on appear similar in that meaning depends on context
+
+vnames <- read_csv(
+  "vname, neon, sources  
+  hhid, Household ID, accounts
+  hhname, Household Name, donor-accounts
+  groupaccountid, Group Primary Member ID, accounts
+  partnerchild, Partner and Children (C), accounts
+  gender, Gender, accounts
+
+  accountid, Account ID, donor
+  account_name, Account Name, regs
+  account_type, Account Type, donor 
+  companyid, Company ID, accounts
+  company_name, Company Name, donor-accounts
+
+  deceased, Deceased, donor-accounts
+  donotcontact, Do Not Contact, donor-accounts
+
+  status, Status, events-regs
+  start_date, Starts On, events
+  end_date, Ends On, events  
+
+  activityid, Activity ID, accounts
+  activity_contactid, Activity Contact Account ID, accounts
+  importid, Import ID, accounts
+  contact_type, Contact Type, accounts
+  account_note, Account Note, accounts
+  reg_allamount, All Registration Amount, accounts
+  donation_allamount, All Donation Amount, accounts
+
+  shopcartid, Shopping Cart ID, donor
+  campaignid, Campaign ID, donor
+  campaign, Campaign Name, donor
+  purpose, Purpose, donor
+  fund, Fund, donor
+  tender, Tender Type, donor
+
+  fullname, Full Name (F), donor-accounts
+  city, City, donor
+  address1, Address Line 1, donor
+  state, State/Province, donor
+  zip, Zip Code, donor
+  fulladdress, Full Street Address (F), accounts
+  email1, Email 1, accounts
+
+  donation, Donation Amount, donor
+  donationid, Donation ID, donor  
+  donation_date, Donation Date, donor  
+  tribute_fullname, Tribute Full Name (F), donor  
+  dafadvisorid, DAFpay Advisor Account ID, donor
+  dafadvisorname, DAFpay Advisor Account Name, donor
+  dafgrantid, DAFpay Grant ID, donor
+  dafstatus, DAFpay Status, donor
+  dafnote, DAFpay Note, donor
+
+  eventid, Event ID, events
+  event_name, Event Name, events
+  event_category, Category, events
+  event_topic, Topic, events
+  event_code, Code, events
+  event_attendees, Attendees, events
+  event_waitlisted, Waitlisted, events
+  "
+)
+vnames
+
+# "Event ID"   "Event Name" "Category"   "Topic"      "Code"       "Attendees"  "Waitlisted" "Starts On"  "Status"     "Ends On"    "...11"
+
+lookup <- deframe(vnames[, c("vname", "neon")])
+lookup
+sort(lookup)
+
+```
+
+### Accounts data
+
+Get data from neon:
+
+-   "Don's all-accounts report" -- an All Accounts Report
+-   Run separately for individuals and companies and combine
+
+```{r}
+#| label: accounts-data-from-neon-report
+
+acctfnames <- c(
+  "accounts_individuals_2025-07-18.csv",
+  "accounts_companies_2025-07-18.csv"
+)
+acctpaths <- fs::path(neon, acctfnames)
+
+acct1 <- vroom(
+  acctpaths,
+  col_types = cols(.default = col_character()),
+  id = "fname"
+)
+ns(acct1)
+skimr::skim(acct1)
+glimpse(acct1)
+# cbind(1:ncol(acct1), names(acct1))
+# nrows <- acct1 |> distinct() |> nrow()
+
+acct2 <- acct1 |>
+  rename(any_of(lookup)) |>
+  mutate(
+    account_type2 = case_when(
+      str_detect(fname, "individuals") ~ "Individual",
+      str_detect(fname, "companies") ~ "Company",
+      .default = "ERROR"
+    )
+  )
+count(acct2, account_type, account_type2) # we can drop account_type2
+skim(acct2) # drop ...24, activity_contactid, activityid, gender
+count(acct2, importid) # drop it's only values are 10 and 4 with most missing
+count(acct2, donotcontact)
+count(acct2, deceased)
+
+drops <- c(
+  "...24",
+  "account_type2",
+  "activity_contactid",
+  "activityid",
+  "fname",
+  "gender",
+  "importid"
+)
+
+acct3 <- acct2 |>
+  select(-any_of(drops)) |>
+  mutate(
+    reg_allamount = parse_number(reg_allamount),
+    donation_allamount = parse_number(donation_allamount),
+    donotcontact = donotcontact == "Yes",
+    deceased = deceased == "Yes"
+  )
+glimpse(acct3)
+skim(acct3)
+
+count(acct3, account_type)
+#   account_type     n
+#   <chr>        <int>
+# 1 Company        291
+# 2 Individual    4511
+
+saveRDS(acct3, fs::path(rds, "accounts.rds"))
+
+```
+
+### Create household-account linkages file for individuals in accounts data
+
+This linkage file only includes people with accounts. "Additional contacts" who do not have accounts (e.g., a child who attends classes) are not included in this file. 
+
+TODO: Consider including information from "Don's all-contacts report", an Additional Contact Report; run on 2025-07-18.
+
+```{r}
+#| label: create-accounts
+
+accounts <- readRDS(fs::path(rds, "accounts.rds"))
+ns(accounts)
+
+linkages <- accounts |>
+  filter(account_type == "Individual") |>
+  select(hhid, hhname, accountid, fullname, fulladdress, city, state) |>
+  arrange(as.integer(hhid), as.integer(accountid))
+
+saveRDS(linkages, fs::path(rds, "linkages.rds"))
+
+```
+
+
+### Donations data from donation details report
+
+Donations from neon -- "Don's donation details report". We run the report once for Individuals and once for Companies because there does not seem to be a way to run it as a single report (?). Thus, we read the two separate reports and combine below.
+
+-   includes most ids but not household id. However, it has household name. We need to match this against a linkage file to get 
+-   includes deceased and do not contact
+-   Donations can include Donations, Pledges, Pledge Payments, and Matching Pledges
+
+Oddly, the donations details report include household name but it does not appear possible to also include household id. This prepare donations in two steps (1) get the donations data without household id, and (2) add household id from the linkages file.
+
+```{r}
+#| label: donations-from-neon-report
+
+dfnames <- c(
+  "donations_detail_individuals_2025-07-18.csv",
+  "donations_detail_companies_2025-07-18.csv"
+)
+
+dpaths <- fs::path(neon, dfnames)
+
+don1 <- vroom(
+  dpaths,
+  col_types = cols(.default = col_character()),
+  id = "fname"
+)
+skimr::skim(don1)
+glimpse(don1)
+
+nrows <- don1 |> distinct() |> nrow()
+
+lookup <- deframe(vnames[, c("vname", "neon")])
+lookup
+don2 <- don1 |>
+  rename(any_of(lookup)) |>
+  mutate(
+    account_type = case_when(
+      str_detect(fname, "individuals") ~ "Individual",
+      str_detect(fname, "companies") ~ "Company",
+      .default = "ERROR"
+    )
+  )
+glimpse(don2)
+count(don2, fname, account_type)
+
+don3 <- don2 |>
+  select(-c(starts_with("..."), fname)) |>
+  mutate(donation = parse_number(donation)) # the fields that cause problems are shown as NA in the source data, so ok
+
+glimpse(don3)
+skim(don3)
+
+saveRDS(don3, fs::path(rds, "donations_no_hhid.rds"))
+
+```
+
+### Add household IDs to donations data
+
+Add hhid from the linkages data
+
+```{r}
+#| label: donations-with-hhid
+
+donations_no_hhid <- readRDS(fs::path(rds, "donations_no_hhid.rds"))
+linkages <- readRDS(fs::path(rds, "linkages.rds"))
+
+glimpse(donations_no_hhid)
+ns(donations_no_hhid)
+ns(linkages)
+
+donations <- donations_no_hhid |>
+  left_join(
+    linkages |> select(hhname, hhid, accountid),
+    by = join_by(hhname, accountid)
+  ) |>
+  select(hhid, hhname, accountid, fullname, everything())
+
+glimpse(donations)
+
+saveRDS(donations, fs::path(rds, "donations.rds"))
+
+```
+
+### Events and events registrations
+
+"Events" is a neon catchall name that includes performances, classes, workshops, dinners and several other categories. Neon has an events file that can be downloaded with information on each event, including a category (performance, ...). I don't know yet how the categories are created or assigned, but I imagine Judy and possibly Erin do this.
+
+Neon does not appear to have reports that let us extract information about events so it looks like the thing to do is export the events table.
+
+#### Events
+
+Get and save events "as-is". Then add a major category field.
+
+```{r}
+#| label: events-description-data
+
+efname <- "events_2025-07-20.csv"
+epath <- fs::path(neon, efname)
+
+ev1 <- vroom(epath, col_types = cols(.default = col_character()))
+skimr::skim(ev1)
+glimpse(ev1)
+ns(ev1)
+
+ev2 <- ev1 |>
+  rename(any_of(lookup)) |>
+  rename(event_status = status)
+names(ev2)
+glimpse(ev2)
+count(ev2, event_topic) # has names of people for some events -- KEEP
+count(ev2, event_code) # don't know what it is, but not blank, appears to be a date -- KEEP
+count(ev2, event_attendees) # should be integer
+count(ev2, event_waitlisted) # "0" for all -- DROP
+count(ev2, event_start) # mm/dd/yyyy
+count(ev2, event_end) # mm/dd/yyyy
+count(ev2, event_status) # ACTIVE or INACTIVE -- KEEP
+skim(ev2)
+
+ev3 <- ev2 |>
+  select(-c(...11, event_waitlisted)) |>
+  mutate(
+    event_attendees = as.integer(event_attendees),
+    event_start = lubridate::mdy(event_start),
+    event_end = lubridate::mdy(event_end)
+  )
+glimpse(ev3)
+skim(ev3)
+ev3 |> filter(event_attendees == 406)
+count(ev3, event_category) # 43 categories; NA has 15 records
+
+saveRDS(ev3, fs::path(rds, "events_no_majorcat.rds"))
+
+```
+
+#### Add major category for events
+
+```{r}
+#| label: events-majorcat
+
+evcat1 <- readRDS(fs::path(rds, "events_no_majorcat.rds"))
+count(evcat1, event_category)
+
+# major category: performance, classes, ?
+# minor category: music_mfs, music_other
+
+evcat2 <- evcat1 |>
+  mutate(
+    event_majorcat = case_when(
+      str_detect(event_category, "Performances") ~ "performance",
+      event_category %in% c("Shakespeare") ~ "performance",
+      event_category == "Children's Theater" &
+        str_detect(event_name, "Performance") &
+        !str_detect(event_name, "Performance Explorers") ~
+        "performance",
+      event_category == "Children's Theater" &
+        str_detect(event_name, "Showcase") ~
+        "performance",
+      event_category == "Children's Theater" &
+        str_detect(event_name, "SOLD OUT") ~
+        "performance",
+      event_name %in%
+        c(
+          "2nd Annual Hubbard Hall-oween Celebration (2016)",
+          "An Unforgettable Crooner Cabaret",
+          "Hubbard Hall-oween Celebration",
+          "Hubbard Hall-O-Ween Monster Mash Ball; 7pm",
+          "Hubbard Halloween Ball - Saturday, October 26th, 2019 at 6pm",
+          "Miscast Cabaret -- Fundraiser",
+          "Music From Salem Listening Club: Music About Nature",
+          "Night of Duets Cabaret -- Fundraiser",
+          "Songs for Scholarships Cabaret - Saturday July 28th at 7pm",
+          "Special Event: A Day at the Opera, August 15",
+          "TriBeCaStan: In Concert!",
+          "Whispering Bones"
+        ) ~
+        "performance",
+      str_detect(event_name, "Blues") & str_detect(event_name, "Brews") ~
+        "performance", # some oddball text
+      str_detect(event_name, "Christmas Carol") &
+        str_detect(event_name, "Performance") ~
+        "performance",
+
+      event_category %in%
+        c(
+          "Classes",
+          "Ballet",
+          "Bollywood & BollyX",
+          "Dance Workshops",
+          "Foil Fencing",
+          "Hip Hop",
+          "Irish Step Dance",
+          "Pilates/Yoga",
+          "Puppetry",
+          "Tap Dance",
+          "Visual Arts",
+          "Visual Arts - Crafts",
+          "Wellness",
+          "Workshops"
+        ) ~
+        "class",
+      str_detect(event_category, "Classes") ~ "class", # Only needed if catching partial matches
+      event_category == "Children's Theater" ~ "class", # CAUTION: requires that performances be filtered out above
+      event_category == "Chorale" ~ "class", # CAUTION: some might be performances
+      str_detect(event_category, "Martial Arts") ~ "class",
+      str_detect(event_category, "Workshops") ~ "class",
+      event_name %in%
+        c(
+          "Chair Yoga (Ages 16 & up) Fridays, Feb. 9 - May 10 -  12:15pm - 1pm"
+        ) ~
+        "class",
+
+      event_category %in%
+        c(
+          "Community Events",
+          "Curiosity Forum",
+          "Dinners",
+          "Exhibits, Films & Lectures",
+          "Film Screenings",
+          "Home & Garden",
+          "Literary"
+        ) ~
+        "community",
+      str_detect(event_name, "Community") ~ "community",
+      str_detect(event_name, "Garden Tour") ~ "community",
+      str_detect(event_name, "Holiday Breakfast") ~ "community",
+
+      # note that this should come last and only pick up items not captured above
+      event_category %in%
+        c("Auditions", "Fundraising Events", "Special Events", NA_character_) ~
+        "other",
+      str_detect(event_name, "Gala") ~ "other",
+      .default = "ERROR"
+    )
+  )
+
+count(evcat2, event_majorcat)
+tmp <- count(evcat2, event_majorcat, event_category, event_name)
+
+# mutate(event_majorcat = case_when(
+#   str_detect(event_category, "Music from Salem Performances") ~ "mfs",
+#   str_detect(event_category, )
+#   .default = "other"
+# )
+
+count(evcat2, event_majorcat)
+saveRDS(evcat2, fs::path(rds, "events.rds"))
+
+```
+
+
+#### Event registrations data
+
+Currently this comes from exporting Events Registrations data. Done for 2 time periods separately because of neon limits on # of records that can be exported -- 2011 through 2019 calendar years, and 2020 forward.
+
+As with data describing events, it does not look possible to create reports for event registrations - the thing to do is export the data and then enhance it as needed.
+
+```{r}
+#| label: registrations-from-export
+#| eval: true
+
+regfnames <- c(
+  "registrations_2011_through_2019.csv",
+  "registrations_2020_through_2025-07-17.csv"
+)
+regpaths <- fs::path(neon, regfnames)
+
+regs1 <- vroom(
+  regpaths,
+  col_types = cols(.default = col_character())
+)
+skimr::skim(regs1)
+glimpse(regs1)
+
+check <- regs1 |> distinct() |> nrow()
+nrow(regs1)
+check
+
+tmp <- regs1 |>
+  group_by_all() |>
+  filter(n() > 1) |>
+  ungroup()
+# ~ 7k duplicates, not obvious why, need to investigate -- some are without account ids and may be legitimate
+# KEEP DUPLICATES FOR NOW
+names(regs1)
+regs2 <- regs1 |>
+  rename_with(.fn = tolower) |>
+  select(
+    accountid = 1,
+    acctname = 2,
+    amount,
+    event,
+    notes,
+    startdate = `starts on`,
+    payment,
+    createdate = `created date`,
+    lastdate = `last modified date`,
+    lastmodby = `last modified by`,
+    type,
+    sysupdt = `system updates`,
+    campaign,
+    regdate = `registered on`,
+    status
+  )
+
+skimr::skim(regs2)
+glimpse(regs2)
+
+regs3 <- regs2 |>
+  mutate(
+    across(contains("date"), \(x) lubridate::mdy(x)),
+    amount = parse_number(amount)
+  )
+
+skimr::skim(regs3)
+glimpse(regs3)
+
+count(regs3, event, sort = TRUE) # 1.9k events none missing!
+count(regs3, notes) # ~ 41 notes, rest are NA
+count(regs3, payment) # 137 varieties
+count(regs3, type)
+# 1 Attendee              27953
+# 2 Registrant             7154
+# 3 Registrant & Attendee 18912
+count(regs3, campaign) # 33 campaigns noted; 37k recs are NA
+count(regs3, type)
+
+events <- count(regs3, event, sort = TRUE) # 1.9k events none missing!
+
+saveRDS(regs3, fs::path(rds, "registrations.rds"))
+
+```
+
+
+## OLD BELOW HERE
+
+
+### Classify registrations by major and minor categories
+
+
+## Analysis
+
+```{r}
+#| label: get-data
+
+linkages <- readRDS(fs::path(rds, "linkages.rds"))
+accounts <- readRDS(fs::path(rds, "accounts.rds"))
+donations <- readRDS(fs::path(rds, "donations.rds"))
+registrations <- readRDS(fs::path(rds, "registrations.rds"))
+
+```
+
+Our goal is to define the top 20% of all Hubbard Hall donors from the past 11 years (I think that was how far back we said this went) and then also from the past 5 years.
+
+We are looking for contact family name, total giving all time, last gift date, last FY total giving amount, and for the top 20% a breakdown of what their gift categories were (we want a complete donor profile, so for each donor we want to see the total contribution amount that includes donations, class purchases, ticket buys, etc.)
+
+
+### Top 20% all years
+
+
+```{r}
+
+glimpse(donations)
+skim(donations)
+count(donations, type)
+count(donations, fund)
+count(donations, purpose)
+count(donations, source) # prob not needed
+
+don1 <- donations |>
+  filter(type == "DONATION", status == "SUCCEEDED") |>
+  filter(accountid != "36805") |> # cash and miscellaneous credit card transactions
+  select(accountid, acctname, date, donation) |> # campaign, fund, purpose,
+  left_join(
+    accounts |> select(accountid, accttype, hhid, hhname),
+    by = join_by(accountid)
+  ) |>
+  filter(accttype == "Individual") |>
+  mutate(
+    hhfy = ifelse(month(date) >= 7, year(date) + 1, year(date)),
+    hhid = ifelse(is.na(hhid), paste0("h_", accountid), hhid),
+    hhname = ifelse(is.na(hhname), paste0("h_", acctname), hhname)
+  )
+skim(don1)
+
+# group by hh and hhfy
+donfy <- don1 |>
+  summarise(donation = sum(donation), .by = c(hhid, hhname, hhfy))
+
+donsums <- donfy |>
+  summarise(
+    total = sum(donation),
+    before_2021 = sum(donation * (hhfy < 2021)),
+    since_2021 = sum(donation * (hhfy >= 2021)),
+    .by = c(hhid, hhname)
+  )
+
+donfywide <- donfy |>
+  pivot_wider(names_from = hhfy, values_from = donation, values_fill = 0)
+
+donfinal <- donsums |>
+  left_join(
+    donfywide |>
+      select(hhid, hhname, `2021`:`2026`),
+    by = join_by(hhid, hhname)
+  ) |>
+  mutate(
+    pct_total = total / sum(total),
+    pct_2021plus = since_2021 / sum(since_2021)
+  ) |>
+  relocate(pct_total, pct_2021plus, .after = since_2021) |>
+  arrange(desc(total))
+
+donfinal
+
+```
+
+### Top 20% 5 years
+
+
+

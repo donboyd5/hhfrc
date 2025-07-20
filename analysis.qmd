@@ -378,9 +378,27 @@ evcat2 <- evcat1 |>
       event_category == "Children's Theater" &
         str_detect(event_name, "SOLD OUT") ~
         "performance",
-      event_name == "An Unforgettable Crooner Cabaret" ~ "performance",
+      event_name %in%
+        c(
+          "2nd Annual Hubbard Hall-oween Celebration (2016)",
+          "An Unforgettable Crooner Cabaret",
+          "Hubbard Hall-oween Celebration",
+          "Hubbard Hall-O-Ween Monster Mash Ball; 7pm",
+          "Hubbard Halloween Ball - Saturday, October 26th, 2019 at 6pm",
+          "Miscast Cabaret -- Fundraiser",
+          "Music From Salem Listening Club: Music About Nature",
+          "Night of Duets Cabaret -- Fundraiser",
+          "Songs for Scholarships Cabaret - Saturday July 28th at 7pm",
+          "Special Event: A Day at the Opera, August 15",
+          "TriBeCaStan: In Concert!",
+          "Whispering Bones"
+        ) ~
+        "performance",
       str_detect(event_name, "Blues") & str_detect(event_name, "Brews") ~
         "performance", # some oddball text
+      str_detect(event_name, "Christmas Carol") &
+        str_detect(event_name, "Performance") ~
+        "performance",
 
       event_category %in%
         c(
@@ -404,6 +422,12 @@ evcat2 <- evcat1 |>
       event_category == "Children's Theater" ~ "class", # CAUTION: requires that performances be filtered out above
       event_category == "Chorale" ~ "class", # CAUTION: some might be performances
       str_detect(event_category, "Martial Arts") ~ "class",
+      str_detect(event_category, "Workshops") ~ "class",
+      event_name %in%
+        c(
+          "Chair Yoga (Ages 16 & up) Fridays, Feb. 9 - May 10 -  12:15pm - 1pm"
+        ) ~
+        "class",
 
       event_category %in%
         c(
@@ -417,9 +441,13 @@ evcat2 <- evcat1 |>
         ) ~
         "community",
       str_detect(event_name, "Community") ~ "community",
+      str_detect(event_name, "Garden Tour") ~ "community",
       str_detect(event_name, "Holiday Breakfast") ~ "community",
 
-      event_category %in% c("Auditions") ~ "other",
+      # note that this should come last and only pick up items not captured above
+      event_category %in%
+        c("Auditions", "Fundraising Events", "Special Events", NA_character_) ~
+        "other",
       str_detect(event_name, "Gala") ~ "other",
       .default = "ERROR"
     )
@@ -435,6 +463,7 @@ tmp <- count(evcat2, event_majorcat, event_category, event_name)
 # )
 
 count(evcat2, event_majorcat)
+saveRDS(evcat2, fs::path(rds, "events.rds"))
 
 ```
 

@@ -22,7 +22,7 @@ rds <- fs::path(hhdr, "rds")
 
 ```
 
-### Define variable mapping
+## Define variable mapping
 
 Map my variable names to neon names so that I have consistent names across files.
 
@@ -45,8 +45,14 @@ Map my variable names to neon names so that I have consistent names across files
 
 # put major id information first and then have blocks for different kinds of variables
 
-# Status  can mean different things in different contexts so we may rename it to events_status, regs_status, etc.
-# Starts on and Ends on appear similar in that meaning depends on context
+# Status  can ?? mean different things in different contexts so we may rename it to events_status, regs_status, etc.
+# Starts on and Ends on appear ?? similar in that meaning depends on context
+
+#  [1] "accountid"          "account_name"        "start_date"         "Payment"
+#  [8] "Created Date"       "Created By"         "Last Modified Date" "Last Modified By"   "Type"               "System Updates"     "Campaign"
+# [15] "Registered On"      "status"             "...17"
+
+# CAUTION: note that event name is called Event in the Events file, and Event Name in the registrations file. The code below deals properly with this.
 
 vnames <- read_csv(
   "vname, neon, sources  
@@ -68,6 +74,17 @@ vnames <- read_csv(
   status, Status, events-regs
   start_date, Starts On, events
   end_date, Ends On, events  
+  notes, Notes, regs
+  amount, Amount, regs
+  payment_method, Payment, regs
+  created_date, Created Date, regs
+  created_by, Created By, regs
+  last_mod_date, Last Modified Date, regs
+  last_mod_by, Last Modified By, regs
+  type, Type, regs
+  sysupdt, System Updates, regs,
+  campaign, Campaign, regs
+  registered_date, Registered On, regs
 
   activityid, Activity ID, accounts
   activity_contactid, Activity Contact Account ID, accounts
@@ -104,6 +121,7 @@ vnames <- read_csv(
 
   eventid, Event ID, events
   event_name, Event Name, events
+  event_name, Event, regs
   event_category, Category, events
   event_topic, Topic, events
   event_code, Code, events
@@ -121,7 +139,7 @@ sort(lookup)
 
 ```
 
-### Accounts data
+## Accounts data
 
 Get data from neon:
 
@@ -194,7 +212,7 @@ saveRDS(acct3, fs::path(rds, "accounts.rds"))
 
 ```
 
-### Create household-account linkages file for individuals in accounts data
+## Create household-account linkages file for individuals in accounts data
 
 This linkage file only includes people with accounts. "Additional contacts" who do not have accounts (e.g., a child who attends classes) are not included in this file. 
 
@@ -216,7 +234,7 @@ saveRDS(linkages, fs::path(rds, "linkages.rds"))
 ```
 
 
-### Donations data from donation details report
+## Donations data from donation details report
 
 Donations from neon -- "Don's donation details report". We run the report once for Individuals and once for Companies because there does not seem to be a way to run it as a single report (?). Thus, we read the two separate reports and combine below.
 
@@ -246,8 +264,6 @@ glimpse(don1)
 
 nrows <- don1 |> distinct() |> nrow()
 
-lookup <- deframe(vnames[, c("vname", "neon")])
-lookup
 don2 <- don1 |>
   rename(any_of(lookup)) |>
   mutate(
@@ -271,7 +287,7 @@ saveRDS(don3, fs::path(rds, "donations_no_hhid.rds"))
 
 ```
 
-### Add household IDs to donations data
+## Add household IDs to donations data
 
 Add hhid from the linkages data
 
@@ -298,13 +314,11 @@ saveRDS(donations, fs::path(rds, "donations.rds"))
 
 ```
 
-### Events and events registrations
+## Events description data
 
 "Events" is a neon catchall name that includes performances, classes, workshops, dinners and several other categories. Neon has an events file that can be downloaded with information on each event, including a category (performance, ...). I don't know yet how the categories are created or assigned, but I imagine Judy and possibly Erin do this.
 
 Neon does not appear to have reports that let us extract information about events so it looks like the thing to do is export the events table.
-
-#### Events
 
 Get and save events "as-is". Then add a major category field.
 
@@ -321,15 +335,19 @@ ns(ev1)
 
 ev2 <- ev1 |>
   rename(any_of(lookup)) |>
-  rename(event_status = status)
+  rename(
+    event_status = status,
+    event_start_date = start_date,
+    event_end_date = end_date
+  )
 names(ev2)
 glimpse(ev2)
 count(ev2, event_topic) # has names of people for some events -- KEEP
 count(ev2, event_code) # don't know what it is, but not blank, appears to be a date -- KEEP
 count(ev2, event_attendees) # should be integer
 count(ev2, event_waitlisted) # "0" for all -- DROP
-count(ev2, event_start) # mm/dd/yyyy
-count(ev2, event_end) # mm/dd/yyyy
+count(ev2, event_start_date) # mm/dd/yyyy
+count(ev2, event_end_date) # mm/dd/yyyy
 count(ev2, event_status) # ACTIVE or INACTIVE -- KEEP
 skim(ev2)
 
@@ -337,8 +355,8 @@ ev3 <- ev2 |>
   select(-c(...11, event_waitlisted)) |>
   mutate(
     event_attendees = as.integer(event_attendees),
-    event_start = lubridate::mdy(event_start),
-    event_end = lubridate::mdy(event_end)
+    event_start_date = lubridate::mdy(event_start_date),
+    event_end_date = lubridate::mdy(event_end_date)
   )
 glimpse(ev3)
 skim(ev3)
@@ -349,7 +367,7 @@ saveRDS(ev3, fs::path(rds, "events_no_majorcat.rds"))
 
 ```
 
-#### Add major category for events
+## Construct and add major category for events
 
 ```{r}
 #| label: events-majorcat
@@ -465,7 +483,7 @@ saveRDS(evcat2, fs::path(rds, "events.rds"))
 ```
 
 
-#### Event registrations data
+## Event registrations data
 
 Currently this comes from exporting Events Registrations data. Done for 2 time periods separately because of neon limits on # of records that can be exported -- 2011 through 2019 calendar years, and 2020 forward.
 
@@ -473,7 +491,6 @@ As with data describing events, it does not look possible to create reports for 
 
 ```{r}
 #| label: registrations-from-export
-#| eval: true
 
 regfnames <- c(
   "registrations_2011_through_2019.csv",
@@ -499,30 +516,20 @@ tmp <- regs1 |>
 # ~ 7k duplicates, not obvious why, need to investigate -- some are without account ids and may be legitimate
 # KEEP DUPLICATES FOR NOW
 names(regs1)
-regs2 <- regs1 |>
-  rename_with(.fn = tolower) |>
-  select(
-    accountid = 1,
-    acctname = 2,
-    amount,
-    event,
-    notes,
-    startdate = `starts on`,
-    payment,
-    createdate = `created date`,
-    lastdate = `last modified date`,
-    lastmodby = `last modified by`,
-    type,
-    sysupdt = `system updates`,
-    campaign,
-    regdate = `registered on`,
-    status
-  )
 
-skimr::skim(regs2)
+
+regs2 <- regs1 |>
+  rename(any_of(lookup)) |>
+  rename(
+    event_status = status,
+    event_start_date = start_date
+  )
+names(regs2)
 glimpse(regs2)
+skimr::skim(regs2)
 
 regs3 <- regs2 |>
+  select(-...17) |>
   mutate(
     across(contains("date"), \(x) lubridate::mdy(x)),
     amount = parse_number(amount)
@@ -531,9 +538,9 @@ regs3 <- regs2 |>
 skimr::skim(regs3)
 glimpse(regs3)
 
-count(regs3, event, sort = TRUE) # 1.9k events none missing!
+count(regs3, event_name, sort = TRUE) # 1.9k events none missing!
 count(regs3, notes) # ~ 41 notes, rest are NA
-count(regs3, payment) # 137 varieties
+count(regs3, payment_method) # 137 varieties
 count(regs3, type)
 # 1 Attendee              27953
 # 2 Registrant             7154
@@ -541,97 +548,31 @@ count(regs3, type)
 count(regs3, campaign) # 33 campaigns noted; 37k recs are NA
 count(regs3, type)
 
-events <- count(regs3, event, sort = TRUE) # 1.9k events none missing!
+events <- count(regs3, event_name, sort = TRUE) # 1.9k events none missing!
 
-saveRDS(regs3, fs::path(rds, "registrations.rds"))
-
-```
-
-
-## OLD BELOW HERE
-
-
-### Classify registrations by major and minor categories
-
-
-## Analysis
-
-```{r}
-#| label: get-data
-
-linkages <- readRDS(fs::path(rds, "linkages.rds"))
-accounts <- readRDS(fs::path(rds, "accounts.rds"))
-donations <- readRDS(fs::path(rds, "donations.rds"))
-registrations <- readRDS(fs::path(rds, "registrations.rds"))
+saveRDS(regs3, fs::path(rds, "registrations_no_eventid.rds"))
 
 ```
 
-Our goal is to define the top 20% of all Hubbard Hall donors from the past 11 years (I think that was how far back we said this went) and then also from the past 5 years.
-
-We are looking for contact family name, total giving all time, last gift date, last FY total giving amount, and for the top 20% a breakdown of what their gift categories were (we want a complete donor profile, so for each donor we want to see the total contribution amount that includes donations, class purchases, ticket buys, etc.)
-
-
-### Top 20% all years
+## Put eventid on registrations file
 
 
 ```{r}
+#| label: eventid-on-registrations
 
-glimpse(donations)
-skim(donations)
-count(donations, type)
-count(donations, fund)
-count(donations, purpose)
-count(donations, source) # prob not needed
+events <- readRDS(fs::path(rds, "events.rds"))
+regsnoid <- readRDS(fs::path(rds, "registrations_no_eventid.rds"))
 
-don1 <- donations |>
-  filter(type == "DONATION", status == "SUCCEEDED") |>
-  filter(accountid != "36805") |> # cash and miscellaneous credit card transactions
-  select(accountid, acctname, date, donation) |> # campaign, fund, purpose,
+ns(events)
+ns(regsnoid)
+
+regsid <- regsnoid |>
   left_join(
-    accounts |> select(accountid, accttype, hhid, hhname),
-    by = join_by(accountid)
-  ) |>
-  filter(accttype == "Individual") |>
-  mutate(
-    hhfy = ifelse(month(date) >= 7, year(date) + 1, year(date)),
-    hhid = ifelse(is.na(hhid), paste0("h_", accountid), hhid),
-    hhname = ifelse(is.na(hhname), paste0("h_", acctname), hhname)
-  )
-skim(don1)
+    events |> select(eventid, event_name, event_start_date, event_code), # event_code is a unique identifier
+    by = join_by(event_name, event_start_date)
+  ) # including event_start_date in join is crucial and needed to ensure unique matches
 
-# group by hh and hhfy
-donfy <- don1 |>
-  summarise(donation = sum(donation), .by = c(hhid, hhname, hhfy))
-
-donsums <- donfy |>
-  summarise(
-    total = sum(donation),
-    before_2021 = sum(donation * (hhfy < 2021)),
-    since_2021 = sum(donation * (hhfy >= 2021)),
-    .by = c(hhid, hhname)
-  )
-
-donfywide <- donfy |>
-  pivot_wider(names_from = hhfy, values_from = donation, values_fill = 0)
-
-donfinal <- donsums |>
-  left_join(
-    donfywide |>
-      select(hhid, hhname, `2021`:`2026`),
-    by = join_by(hhid, hhname)
-  ) |>
-  mutate(
-    pct_total = total / sum(total),
-    pct_2021plus = since_2021 / sum(since_2021)
-  ) |>
-  relocate(pct_total, pct_2021plus, .after = since_2021) |>
-  arrange(desc(total))
-
-donfinal
+saveRDS(regsid, fs::path(rds, "registrations.rds"))
 
 ```
-
-### Top 20% 5 years
-
-
 

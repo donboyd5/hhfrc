@@ -42,54 +42,7 @@ registrations <- readRDS(fs::path(rds, "registrations.rds"))
 
 ```
 
-
-## Quick plot: Household donor spending and performances, 2021 plus
-
-```{r}
-
-glimpse(donations)
-
-don1 <- donations |>
-  filter(account_type == "Individual", year(donation_date) >= 2021) |>
-  summarise(donation = sum(donation, na.rm = TRUE), .by = c(hhid, hhname)) |>
-  filter(donation >= 15)
-
-regs1 <- registrations |>
-  filter(year(event_start_date) >= 2021) |>
-  select(accountid, account_name, amount) |>
-  left_join(
-    linkages |> select(accountid, account_name = fullname, hhid, hhname),
-    by = join_by(accountid, account_name)
-  ) |>
-  filter(!is.na(hhid)) |>
-  summarise(amount = sum(amount, na.rm = TRUE), .by = c(hhid, hhname))
-
-comp <- don1 |> 
-  left_join(regs1, by = join_by(hhid, hhname)) |> 
-  mutate(amount=replace_na(amount, 0))
-skim(comp)
-
-comp |> 
-  ggplot(aes(donation, amount)) +
-  geom_point()
-
-comp |> 
-  ggplot(aes(amount, donation)) +
-  geom_point()
-
-comp |> 
-  filter(donation >= 5000, donation < 20000, amount < 2000) |> 
-  ggplot(aes(amount, donation)) +
-  geom_point()
-
-```
-
-
-
-
 ## Analysis
-
-
 
 Our goal is to define the top 20% of all Hubbard Hall donors from the past 11 years (I think that was how far back we said this went) and then also from the past 5 years.
 
@@ -102,31 +55,28 @@ We are looking for contact family name, total giving all time, last gift date, l
 ```{r}
 
 glimpse(donations)
+ns(donations)
 skim(donations)
-count(donations, type)
+count(donations, account_type)
+count(donations, tender_type)
+count(donations, donation_type)
+count(donations, donation_status)
+count(donations, payment_status)
+
 count(donations, fund)
 count(donations, purpose)
-count(donations, source) # prob not needed
+# count(donations, source) # prob not needed
 
 don1 <- donations |>
-  filter(type == "DONATION", status == "SUCCEEDED") |>
+  filter(account_type == "Individual", donation_type == "DONATION", donation_status == "SUCCEEDED", payment_status == "SUCCEEDED") |>
   filter(accountid != "36805") |> # cash and miscellaneous credit card transactions
-  select(accountid, acctname, date, donation) |> # campaign, fund, purpose,
-  left_join(
-    accounts |> select(accountid, accttype, hhid, hhname),
-    by = join_by(accountid)
-  ) |>
-  filter(accttype == "Individual") |>
-  mutate(
-    hhfy = ifelse(month(date) >= 7, year(date) + 1, year(date)),
-    hhid = ifelse(is.na(hhid), paste0("h_", accountid), hhid),
-    hhname = ifelse(is.na(hhname), paste0("h_", acctname), hhname)
-  )
+  select(id, name, group, hhid, hhname, accountid, fullname, donation_date, donation) |> # campaign, fund, purpose
+  mutate(hhfy = ifelse(month(donation_date) >= 7, year(donation_date) + 1, year(donation_date)))
 skim(don1)
 
 # group by hh and hhfy
 donfy <- don1 |>
-  summarise(donation = sum(donation), .by = c(hhid, hhname, hhfy))
+  summarise(donation = sum(donation), .by = c(id, name, hhfy))
 
 donsums <- donfy |>
   summarise(
@@ -159,4 +109,64 @@ donfinal
 ### Top 20% 5 years
 
 
+
+
+## Quick plot: Household donor spending and performances, 2021 plus
+
+```{r}
+#| label: donations-events
+
+glimpse(donations)
+glimpse(registrations)
+
+cashcc <- donations |> filter(accountid == "36805")
+sum(cashcc$donation) # 26317.43
+
+don1 <- donations |>
+  rename(account_name = fullname) |>
+  filter(account_type == "Individual", year(donation_date) >= 2021) |>
+  filter(
+    !str_detect(account_name, "Cash and Credit Card Miscellaneous Transactions")
+  ) |>
+  summarise(
+    n = n(),
+    donation = sum(donation, na.rm = TRUE),
+    .by = c(id, name, group)
+  ) |>
+  filter(donation >= 15) |>
+  arrange(desc(donation))
+
+regs1 <- registrations |>
+  filter(year(event_start_date) >= 2021) |>
+  filter(str_detect(type, "Registrant"), event_status == "SUCCEEDED") |>
+  select(id, name, group, hhid, hhname, accountid, account_name, amount)
+skim(regs1)
+
+regs2 <- regs1 |>
+  summarise(amount = sum(amount, na.rm = TRUE), .by = c(id, name, group)) |>
+  arrange(desc(amount))
+
+#  acccount id	name 36805	Cash and Credit Card Miscellaneous Transactions in 2021 plus was 28 transactions, $3890, all donotcontact
+
+regs1 |> filter(is.na(id))
+
+comp <- don1 |>
+  left_join(regs1, by = join_by(hhid, hhname)) |>
+  mutate(amount = replace_na(amount, 0))
+skim(comp)
+
+comp |>
+  ggplot(aes(donation, amount)) +
+  geom_point()
+
+comp |>
+  ggplot(aes(amount, donation)) +
+  geom_point()
+
+comp |>
+  filter(donation >= 5000, donation < 20000, amount < 2000) |>
+  ggplot(aes(amount, donation)) +
+  geom_point()
+
+```
 

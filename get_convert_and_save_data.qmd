@@ -99,7 +99,13 @@ vnames <- read_csv(
   campaign, Campaign Name, donor
   purpose, Purpose, donor
   fund, Fund, donor
-  tender, Tender Type, donor
+  donation_status, Donation Status, donor
+  payment_status, Payment Status, donor
+  
+  donation_type, Donation Type, donor
+  individual_type, Individual Type, donor
+  tribute_type, Tribute Type, donor
+  tender_type, Tender Type, donor
 
   fullname, Full Name (F), donor-accounts
   city, City, donor
@@ -167,17 +173,11 @@ glimpse(acct1)
 # nrows <- acct1 |> distinct() |> nrow()
 
 acct2 <- acct1 |>
-  rename(any_of(lookup)) |>
-  mutate(
-    account_type2 = case_when(
-      str_detect(fname, "individuals") ~ "Individual",
-      str_detect(fname, "companies") ~ "Company",
-      .default = "ERROR"
-    )
-  )
-count(acct2, account_type, account_type2) # we can drop account_type2
+  rename(any_of(lookup))
+
+glimpse(acct2)
 skim(acct2) # drop ...24, activity_contactid, activityid, gender
-count(acct2, importid) # drop it's only values are 10 and 4 with most missing
+count(acct2, importid) # drop its only values are 10 and 4 with most missing
 count(acct2, donotcontact)
 count(acct2, deceased)
 
@@ -214,7 +214,7 @@ saveRDS(acct3, fs::path(rds, "accounts.rds"))
 
 ## Create household-account linkages file for individuals in accounts data
 
-This linkage file only includes people with accounts. "Additional contacts" who do not have accounts (e.g., a child who attends classes) are not included in this file. 
+This linkage file only includes people with accounts. "Additional contacts" who do not have accounts (e.g., a child who attends classes) are not included in this file.
 
 TODO: Consider including information from "Don's all-contacts report", an Additional Contact Report; run on 2025-07-18.
 
@@ -233,12 +233,11 @@ saveRDS(linkages, fs::path(rds, "linkages.rds"))
 
 ```
 
-
 ## Donations data from donation details report
 
 Donations from neon -- "Don's donation details report". We run the report once for Individuals and once for Companies because there does not seem to be a way to run it as a single report (?). Thus, we read the two separate reports and combine below.
 
--   includes most ids but not household id. However, it has household name. We need to match this against a linkage file to get 
+-   includes most ids but not household id. However, it has household name. We need to match this against a linkage file to get
 -   includes deceased and do not contact
 -   Donations can include Donations, Pledges, Pledge Payments, and Matching Pledges
 
@@ -248,8 +247,8 @@ Oddly, the donations details report include household name but it does not appea
 #| label: donations-from-neon-report
 
 dfnames <- c(
-  "donations_detail_individuals_2025-07-18.csv",
-  "donations_detail_companies_2025-07-18.csv"
+  "donations_detail_individuals_2025-07-21.csv",
+  "donations_detail_companies_2025-07-21.csv"
 )
 
 dpaths <- fs::path(neon, dfnames)
@@ -259,6 +258,7 @@ don1 <- vroom(
   col_types = cols(.default = col_character()),
   id = "fname"
 )
+ns(don1)
 skimr::skim(don1)
 glimpse(don1)
 
@@ -266,14 +266,8 @@ nrows <- don1 |> distinct() |> nrow()
 
 don2 <- don1 |>
   rename(any_of(lookup)) |>
-  mutate(
-    account_type = case_when(
-      str_detect(fname, "individuals") ~ "Individual",
-      str_detect(fname, "companies") ~ "Company",
-      .default = "ERROR"
-    ),
-    donation_date = mdy(donation_date)
-  )
+  mutate(donation_date = mdy(donation_date))
+ns(don2)
 glimpse(don2)
 count(don2, fname, account_type)
 
@@ -283,6 +277,10 @@ don3 <- don2 |>
 
 glimpse(don3)
 skim(don3)
+check <- don3 |> filter(is.na(donation))
+count(check, payment_status)
+count(don3, payment_status)
+count(don3, donation_status)
 
 saveRDS(don3, fs::path(rds, "donations_no_hhid.rds"))
 
@@ -307,9 +305,21 @@ donations <- donations_no_hhid |>
     linkages |> select(hhname, hhid, accountid),
     by = join_by(hhname, accountid)
   ) |>
-  select(hhid, hhname, accountid, fullname, everything())
+  mutate(
+    id = ifelse(is.na(hhid), accountid, hhid),
+    name = ifelse(is.na(hhname), fullname, hhname),
+    group = case_when(
+      !is.na(hhid) ~ "household",
+      !is.na(accountid) ~ "account",
+      .default = "other"
+    )
+  ) |>
+  select(id, name, group, hhid, hhname, accountid, fullname, everything())
 
 glimpse(donations)
+count(donations, group)
+count(donations, donation_type)
+ns(donations)
 
 saveRDS(donations, fs::path(rds, "donations.rds"))
 
@@ -483,12 +493,13 @@ saveRDS(evcat2, fs::path(rds, "events.rds"))
 
 ```
 
-
 ## Event registrations data
 
-Currently this comes from exporting Events Registrations data. Done for 2 time periods separately because of neon limits on # of records that can be exported -- 2011 through 2019 calendar years, and 2020 forward.
+Currently this comes from exporting Events Registrations data. Done for 2 time periods separately because of neon limits on \# of records that can be exported -- 2011 through 2019 calendar years, and 2020 forward.
 
 As with data describing events, it does not look possible to create reports for event registrations - the thing to do is export the data and then enhance it as needed.
+
+CAUTION: the registrations data has many people in it with account names, as reported by neon, who do not have account ids. One reason is tthat they may be family members attending a performance who do not have accounts.
 
 ```{r}
 #| label: registrations-from-export
@@ -506,9 +517,9 @@ regs1 <- vroom(
 skimr::skim(regs1)
 glimpse(regs1)
 
-check <- regs1 |> distinct() |> nrow()
-nrow(regs1)
-check
+# check <- regs1 |> distinct() |> nrow()
+# nrow(regs1)
+# check
 
 tmp <- regs1 |>
   group_by_all() |>
@@ -516,7 +527,6 @@ tmp <- regs1 |>
   ungroup()
 # ~ 7k duplicates, not obvious why, need to investigate -- some are without account ids and may be legitimate
 # KEEP DUPLICATES FOR NOW
-names(regs1)
 
 
 regs2 <- regs1 |>
@@ -555,13 +565,14 @@ saveRDS(regs3, fs::path(rds, "registrations_no_eventid.rds"))
 
 ```
 
-## Put eventid on registrations file
 
+## Put eventid, event_code, event_majorcat, ..., hhid, and hhname on registrations file
 
 ```{r}
 #| label: eventid-on-registrations
 
 events <- readRDS(fs::path(rds, "events.rds"))
+linkages <- readRDS(fs::path(rds, "linkages.rds"))
 regsnoid <- readRDS(fs::path(rds, "registrations_no_eventid.rds"))
 
 ns(events)
@@ -569,11 +580,134 @@ ns(regsnoid)
 
 regsid <- regsnoid |>
   left_join(
-    events |> select(eventid, event_name, event_start_date, event_code), # event_code is a unique identifier
+    events |>
+      select(
+        eventid,
+        event_name,
+        event_start_date,
+        event_code,
+        event_majorcat,
+        event_category
+      ), # event_code is a unique identifier
     by = join_by(event_name, event_start_date)
-  ) # including event_start_date in join is crucial and needed to ensure unique matches
+  ) |> # including event_start_date in join is crucial and needed to ensure unique matches
+  left_join(
+    linkages |> select(accountid, account_name = fullname, hhid, hhname),
+    by = join_by(accountid, account_name)
+  ) |>
+  mutate(
+    id = ifelse(is.na(hhid), accountid, hhid),
+    name = ifelse(is.na(hhname), account_name, hhname),
+    group = case_when(
+      !is.na(hhid) ~ "household",
+      !is.na(accountid) ~ "account",
+      .default = "other"
+    )
+  ) |>
+  select(
+    id,
+    name,
+    group,
+    hhid,
+    hhname,
+    accountid,
+    account_name,
+    eventid,
+    event_code,
+    event_name,
+    event_majorcat,
+    event_category,
+    everything()
+  )
+skim(regsid)
+count(regsid, type)
+count(regsid, event_majorcat)
+check <- regsid |> filter(is.na(event_majorcat))
+sum(check$amount) # $32,531 of events that aren't in the events file
+unique(check$event_name) # the missing ones all have 2025 registraions after the data import!
+count(regsid, type)
 
 saveRDS(regsid, fs::path(rds, "registrations.rds"))
+
+# regs |>
+#   filter(str_detect(type, "Registrant"), event_status == "SUCCEEDED") |>
+#   summarise(n = n(), amount = sum(amount), .by = c(type, event_status)) |>
+#   janitor::adorn_totals()
+
+
+```
+
+
+### Investigate missing data
+
+```{r}
+#| eval: false
+
+check <- readRDS(fs::path(rds, "registrations_no_eventid.rds"))
+skim(check)
+
+# amounts by calendar year
+check |>
+  mutate(year = year(event_start_date)) |>
+  summarise(n = n(), amount = sum(amount), .by = year) |>
+  janitor::adorn_totals()
+
+check |>
+  filter(!is.na(accountid)) |>
+  arrange(desc(last_mod_date)) |>
+  filter(row_number() <= 24672) |>
+  mutate(year = year(event_start_date)) |>
+  arrange(year) |>
+  summarise(n = n(), amount = sum(amount), .by = year) |>
+  janitor::adorn_totals()
+
+
+# amounts with and without missing names
+check |>
+  mutate(acctname_missing = is.na(account_name)) |>
+  summarise(amount = sum(amount), .by = acctname_missing) |>
+  mutate(pct = amount / sum(amount))
+
+check |>
+  mutate(accountid_missing = is.na(accountid)) |>
+  summarise(n = n(), amount = sum(amount), .by = accountid_missing) |>
+  mutate(pctamount = amount / sum(amount))
+
+check |>
+  # arrange(desc(last_mod_date)) |>
+  # arrange(desc(event_start_date)) |>
+  arrange(desc(created_date)) |>
+  filter(row_number() <= 24672) |>
+  mutate(has_accountid = !is.na(accountid)) |>
+  summarise(n = n(), amount = sum(amount), .by = has_accountid) |>
+  janitor::adorn_totals()
+
+check |>
+  arrange(desc(last_mod_date)) |>
+  filter(row_number() <= 24672) |>
+  mutate(has_accountid = !is.na(accountid)) |>
+  summarise(n = n(), amount = sum(amount), .by = has_accountid) |>
+  janitor::adorn_totals() |>
+  mutate(
+    pctn = n / n[has_accountid == "Total"],
+    pctamount = amount / amount[has_accountid == "Total"]
+  )
+
+check |>
+  arrange(desc(last_mod_date)) |>
+  mutate(has_accountid = !is.na(accountid)) |>
+  summarise(n = n(), amount = sum(amount), .by = has_accountid) |>
+  janitor::adorn_totals() |>
+  mutate(
+    pctn = n / n[has_accountid == "Total"],
+    pctamount = amount / amount[has_accountid == "Total"]
+  )
+
+check |>
+  filter(!is.na(accountid)) |>
+  arrange(desc(created_date)) |>
+  filter(row_number() <= 24672) |>
+  summarise(n = n(), amount = sum(amount))
 
 ```
 

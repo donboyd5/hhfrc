@@ -15,6 +15,7 @@ library(openxlsx) # for writing xlsx files
 library(lubridate)
 # library(RcppRoll) library(fredr) library(tidycensus)
 library(zoo)
+library(googlesheets4)
 
 # boyd libraries - install from github/donboyd5
 library(btools)

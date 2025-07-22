@@ -58,6 +58,7 @@ vnames <- read_csv(
   "vname, neon, sources  
   hhid, Household ID, accounts
   hhname, Household Name, donor-accounts
+  hhacctname, Household Name/Account Name, hhreport
   groupaccountid, Group Primary Member ID, accounts
   partnerchild, Partner and Children (C), accounts
   gender, Gender, accounts
@@ -82,7 +83,7 @@ vnames <- read_csv(
   last_mod_date, Last Modified Date, regs
   last_mod_by, Last Modified By, regs
   type, Type, regs
-  sysupdt, System Updates, regs,
+  sysupdt, System Updates, regs
   campaign, Campaign, regs
   registered_date, Registered On, regs
 
@@ -108,12 +109,18 @@ vnames <- read_csv(
   tender_type, Tender Type, donor
 
   fullname, Full Name (F), donor-accounts
+  salutation, Household Salutation / Preferred Name, hhreport
   city, City, donor
   address1, Address Line 1, donor
+  address2, Address Line 2, hhreport
   state, State/Province, donor
   zip, Zip Code, donor
   fulladdress, Full Street Address (F), accounts
   email1, Email 1, accounts
+  pemail, Primary Contact Email, hhreport
+  pfname, Primary Contact First Name, hhreport
+  plname, Primary Contact Last Name, hhreport
+  pphone, Primary Contact Phone, hhreport
 
   donation, Donation Amount, donor
   donationid, Donation ID, donor  
@@ -144,6 +151,52 @@ lookup
 sort(lookup)
 
 ```
+
+
+## Household contact information
+
+From Neon: "Household Report - Don's Household contact information report"
+
+```{r}
+
+contactfname <- "household_contact_info_from_report_2025-07-22.csv"
+contactpath <- fs::path(neon, contactfname)
+
+contacts1 <- vroom(
+  contactpath,
+  col_types = cols(.default = col_character())
+)
+ns(contacts1)
+skimr::skim(contacts1)
+glimpse(contacts1)
+# cbind(1:ncol(acct1), names(acct1))
+# nrows <- acct1 |> distinct() |> nrow()
+
+contacts2 <- contacts1 |>
+  rename(any_of(lookup))
+ns(contacts2)
+skim(contacts2)
+
+contacts3 <- contacts2 |>
+  select(-...14) |>
+  mutate(
+    id = ifelse(is.na(hhid), accountid, hhid),
+    name = hhacctname,
+    group = case_when(
+      !is.na(hhid) ~ "household",
+      !is.na(accountid) ~ "account",
+      .default = "other"
+    )
+  ) |>
+  relocate(id, name, group)
+skim(contacts3)
+count(contacts3, group)
+saveRDS(contacts3, fs::path(rds, "contacts.rds"))
+
+
+```
+
+
 
 ## Accounts data
 
@@ -198,15 +251,16 @@ acct3 <- acct2 |>
     donation_allamount = parse_number(donation_allamount),
     donotcontact = donotcontact == "Yes",
     deceased = deceased == "Yes"
-  ) |> 
-    mutate(
+  ) |>
+  mutate(
     id = ifelse(is.na(hhid), accountid, hhid),
     name = ifelse(is.na(hhname), fullname, hhname),
     group = case_when(
       !is.na(hhid) ~ "household",
       !is.na(accountid) ~ "account",
       .default = "other"
-    )) |> 
+    )
+  ) |>
   relocate(id, name, group)
 ns(acct3)
 glimpse(acct3)
@@ -282,10 +336,12 @@ count(don2, fname, account_type)
 
 don3 <- don2 |>
   select(-c(starts_with("..."), fname)) |>
-  mutate(donation_date = mdy(donation_date),
-         donation = parse_number(donation),
-         deceased=deceased=="Yes",
-         donotcontact=donotcontact=="Yes")
+  mutate(
+    donation_date = mdy(donation_date),
+    donation = parse_number(donation),
+    deceased = deceased == "Yes",
+    donotcontact = donotcontact == "Yes"
+  )
 # the fields that cause problems in parse_number are shown as NA in the source data, so ok
 
 glimpse(don3)
@@ -407,16 +463,6 @@ evcat2 <- evcat1 |>
     event_majorcat = case_when(
       str_detect(event_category, "Performances") ~ "performance",
       event_category %in% c("Shakespeare") ~ "performance",
-      event_category == "Children's Theater" &
-        str_detect(event_name, "Performance") &
-        !str_detect(event_name, "Performance Explorers") ~
-        "performance",
-      event_category == "Children's Theater" &
-        str_detect(event_name, "Showcase") ~
-        "performance",
-      event_category == "Children's Theater" &
-        str_detect(event_name, "SOLD OUT") ~
-        "performance",
       event_name %in%
         c(
           "2nd Annual Hubbard Hall-oween Celebration (2016)",
@@ -457,8 +503,18 @@ evcat2 <- evcat1 |>
           "Workshops"
         ) ~
         "class",
+      # event_category == "Children's Theater" &
+      #   str_detect(event_name, "Performance") &
+      #   !str_detect(event_name, "Performance Explorers") ~
+      #   "class",
+      # event_category == "Children's Theater" &
+      #   str_detect(event_name, "Showcase") ~
+      #   "class",
+      # event_category == "Children's Theater" &
+      #   str_detect(event_name, "SOLD OUT") ~
+      #   "class",
       str_detect(event_category, "Classes") ~ "class", # Only needed if catching partial matches
-      event_category == "Children's Theater" ~ "class", # CAUTION: requires that performances be filtered out above
+      event_category == "Children's Theater" ~ "class",
       event_category == "Chorale" ~ "class", # CAUTION: some might be performances
       str_detect(event_category, "Martial Arts") ~ "class",
       str_detect(event_category, "Workshops") ~ "class",
@@ -540,7 +596,6 @@ tmp <- regs1 |>
   ungroup()
 # ~ 7k duplicates, not obvious why, need to investigate -- some are without account ids and may be legitimate
 # KEEP DUPLICATES FOR NOW
-
 
 regs2 <- regs1 |>
   rename(any_of(lookup)) |>
@@ -646,7 +701,6 @@ saveRDS(regsid, fs::path(rds, "registrations.rds"))
 #   filter(str_detect(type, "Registrant"), event_status == "SUCCEEDED") |>
 #   summarise(n = n(), amount = sum(amount), .by = c(type, event_status)) |>
 #   janitor::adorn_totals()
-
 
 ```
 

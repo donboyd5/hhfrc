@@ -1,0 +1,38 @@
+---
+editor_options:
+  chunk_output_type: console
+---
+
+# Appendix: Questions
+
+## Event registrations
+
+-   Neon shows \$1.624 million of registrations and 24,672 records if we set filters to all. But if we try to export the registrations data, it won't let us do it because of a 50,000 record limit. I exported it in 2 steps: (1) registrations before 2021 (35,207 records), and (2) registrations 2021-plus (18,812 records). This gives 54,019 registrations in total – more than twice what Neon shows for all time. I made a few efforts to explain the difference, and get close but can't do it precisely.
+
+![](images/paste-7.png){width="779"}
+
+-   If I (1) combine the two files, (2) sort by creation date, last modification date, or event_start_date, and (3) keep the most-recent 24672 records I get about \$1.9 million for total registrations, not \$1.6 million – see table below, which shows it sorted by last modification date (the amounts are slightly different depending on which date is used, but not by much), and categorized by whether there is an account id. The table is followed by a version with all 54,019 records.
+
+![](images/paste-9.png){width="433"}
+
+![](images/paste-10.png){width="433"}
+
+-   The most-recent-24672-registrations table shows that about 42% of registration records have no account id – often they appear to be for family members who do not have accounts but are registered for events. If we look at the most recent records that have account ids we get \$1.713 million, which is a bit closer to what Neon reports but I suspect that's not the explantion:
+
+![](images/paste-11.png){width="347"}
+
+Given that the raw data show much greater money from event registrations than Neon shows on their web page, and given that about 45% of the money is for individuals without accounts, figuring out why the numbers are so different is important for two reasons:
+
+-   We'd like to understand better which events and classes donors and their households attend, and how much they spend. We can't do that unless we use the right data.
+
+## Related question: Are registrations without account ids credited to their proper household?
+
+-   We'd like to credit households properly for spending on classes and performances. With such a large share of spending being for individuals without account ids, presumably these individuals have not been linked to households. Here's an example – the 12/30/2019 registration by Scott Manley for :
+
+![](images/paste-12.png){width="1018" height="76"}
+
+![](images/paste-14.png)
+
+An important question is whether Koralie Rowse-Manley are linked to the Manley account. One way to check is to create an Additional Contact Report II, searching for the Manely account. I did that and we see that it is linked to Tarah Rowse but does not include Koralie Rowse-Manley. That makes me worry that when registrations do not have account IDs, those registrations are not being credited to their households. Thoughts?
+
+![](images/paste-13.png)

@@ -198,7 +198,17 @@ acct3 <- acct2 |>
     donation_allamount = parse_number(donation_allamount),
     donotcontact = donotcontact == "Yes",
     deceased = deceased == "Yes"
-  )
+  ) |> 
+    mutate(
+    id = ifelse(is.na(hhid), accountid, hhid),
+    name = ifelse(is.na(hhname), fullname, hhname),
+    group = case_when(
+      !is.na(hhid) ~ "household",
+      !is.na(accountid) ~ "account",
+      .default = "other"
+    )) |> 
+  relocate(id, name, group)
+ns(acct3)
 glimpse(acct3)
 skim(acct3)
 
@@ -265,19 +275,22 @@ glimpse(don1)
 nrows <- don1 |> distinct() |> nrow()
 
 don2 <- don1 |>
-  rename(any_of(lookup)) |>
-  mutate(donation_date = mdy(donation_date))
+  rename(any_of(lookup))
 ns(don2)
 glimpse(don2)
 count(don2, fname, account_type)
 
 don3 <- don2 |>
   select(-c(starts_with("..."), fname)) |>
-  mutate(donation = parse_number(donation)) # the fields that cause problems are shown as NA in the source data, so ok
+  mutate(donation_date = mdy(donation_date),
+         donation = parse_number(donation),
+         deceased=deceased=="Yes",
+         donotcontact=donotcontact=="Yes")
+# the fields that cause problems in parse_number are shown as NA in the source data, so ok
 
 glimpse(don3)
 skim(don3)
-check <- don3 |> filter(is.na(donation))
+check <- don3 |> filter(is.na(donation)) # payment_status is DEFERRED
 count(check, payment_status)
 count(don3, payment_status)
 count(don3, donation_status)

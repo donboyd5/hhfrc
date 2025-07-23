@@ -8,11 +8,18 @@ format:
 
 # Analysis
 
-"Our goal is to define the top 20% of all Hubbard Hall donors from the past 11 years (I think that was how far back we said this went) and then also from the past 5 years.
+Alix: "Our goal is to define the top 20% of all Hubbard Hall donors from the past 11 years (I think that was how far back we said this went) and then also from the past 5 years.
 
 We are looking for contact family name, total giving all time, last gift date, last FY total giving amount, and for the top 20% a breakdown of what their gift categories were (we want a complete donor profile, so for each donor we want to see the total contribution amount that includes donations, class purchases, ticket buys, etc.)
 
 We have a couple of questions for Judy additionally, that may be answered after Don has a go. Namely, we are looking for where Sue's donations from Opus live, and also where Kathy Rhoome's donations live to make sure that donations like these are included in the total.  Also, we want to find out if there is a way to link businesses who give to individuals who exist in the database as a soft credit?  This doesn't apply to all businesses, but for example, is MSK linked to Jason in a way where you can pull total giving for an individual and see his corporate contributions as well?"
+
+Top 100 donors all time, 
+and top 100 donors last 5 years
+
+Also, seeing if there is a way to include corporate contributions for any of these individuals as appropriate.
+
+From Judy: "I tested whether a deceased household member’s donations were still included in the household total, and they are. If the primary account is still active and the other household members data still exists then it is included. If the other household members account is deleted, then the data is deleted."
 
 
 ## Setup
@@ -42,7 +49,10 @@ donations <- readRDS(fs::path(rds, "donations.rds"))
 events <- readRDS(fs::path(rds, "events.rds"))
 registrations <- readRDS(fs::path(rds, "registrations.rds"))
 
-xljudy <- read_excel(fs::path(judy, "HH Donor List - All Donations $15+.xlsx"), sheet="List by Total Donations")
+xljudy <- read_excel(
+  fs::path(judy, "HH Donor List - All Donations $15+.xlsx"),
+  sheet = "List by Total Donations"
+)
 
 ```
 
@@ -54,113 +64,45 @@ We are looking for contact family name, total giving all time, last gift date, l
 
 [Dashboard](https://hubbardhall.app.neoncrm.com/np/admin/content/contentList.do)
 
-## start over
-
-```{r}
-
-names(xljudy)
-
-
-df <- vroom(fs::path(neon, "HH Donor List - All Donations $15+.csv"), col_types = cols(.default = col_character()))
-ns(df)
-
-count(donations, account_type)
-count(donations, donation_type)
-count(donations, payment_status)
-count(donations, individual_type)
-
-# filter account level data
-don1 <- donations |> 
-  filter(account_type=="Individual") |> 
-  # filter(!deceased, !donotcontact) |> # these pertain to the individual account
-  filter(donation_type %in% c("DONATION", "PLEDGEPAYMENT"), donation_status=="SUCCEEDED") |> 
-  # special drops related to Judy
-  filter(!hhid %in% 
-           c("224")) # Caroline Eastman
-
-# summarise to household level
-don2 <- don1 |> 
-  summarise(donation=sum(donation),.by=c(id, name)) |> 
-  arrange(desc(donation))
-
-# link to accounts to see if primary householder is deceased or do not contact
-acctlink <- accounts |> 
-  # I DON'T YET KNOW WHY I HAVE TO ADJUST Cora Howe -- her partner Robert is listed as primary in the data
-  mutate(contact_type = case_when(hhid=="54" & accountid=="34713" ~ "Primary Household Contact", # Cora May Howe
-                                  hhid=="54" & accountid=="34712" ~ "Household Contact", # Robert Howe, deceased and DNC
-                                  .default = contact_type
-                                  )) |> 
-  # filter(account_type=="Individual", group=="account", id=="38532")
-  filter(account_type=="Individual") |> 
-  filter(group=="account" |
-           (group=="household" & str_detect(contact_type, "Primary Household Contact"))) |> 
-  # captures PHC in combination with anything else CAUTION: keeps company contacts
-  select(id, name, group, primary_contact=fullname, contact_type, deceased, donotcontact)
-
-acctlink |> filter(id=="38532")
-acctlink |> filter(str_detect(name, "Brosch"))
-donations |> filter(str_detect(name, "Brosch"))
-
-acctlink |> summarise(n=n(), .by=c(id, name)) |> count(n)
-
-  
-don3 <- don2 |> 
-  left_join(acctlink, by = join_by(id, name))
-
-ddnc <- don3 |> 
-  filter(deceased | donotcontact)
-anyDuplicated(ddnc$id)
-
-
-force_keeps <- c("403",  # Bloomington
-                 "530" , # Brand
-                 "1620" # Aldrich
-                 )
-don4 <- don3 |> 
-  filter(!(id %in% ddnc$id & !id %in% force_keeps)) |> 
-  select(-deceased, -donotcontact) |> 
-  filter(donation >=15, id!="36805") |> 
-  arrange(desc(donation), as.numeric(id))
-
-skim(don4)
-don4 |> filter(is.na(group))
-don4 |> filter(id=="1620")
-
-don4 |> writexl::write_xlsx(fs::path(work, "don4.xlsx"))
-
-
-donations |> filter(id=="21") |> select(id, name, donation, donation_date, payment_status) |> janitor::adorn_totals()
-donations |> filter(id=="21") |> select(id, name, donation, donation_date, payment_status) |> arrange(donation_date) |> janitor::adorn_totals()
-# this explains it: 21 Wendy Duvall   100.00    2018-09-18       CANCELED
-
-```
-
-
-## Great now that we know how to get donations, we do Alix's tables
 
 ```{r}
 #| label: account-linkages
 
-acctlink <- accounts |> 
+acctlink <- accounts |>
   # I DON'T YET KNOW WHY I HAVE TO ADJUST Cora Howe -- her partner Robert is listed as primary in the data
-  mutate(contact_type = case_when(hhid=="54" & accountid=="34713" ~ "Primary Household Contact", # Cora May Howe
-                                  hhid=="54" & accountid=="34712" ~ "Household Contact", # Robert Howe, deceased and DNC
-                                  .default = contact_type
-                                  )) |> 
+  mutate(
+    contact_type = case_when(
+      hhid == "54" & accountid == "34713" ~ "Primary Household Contact", # Cora May Howe
+      hhid == "54" & accountid == "34712" ~ "Household Contact", # Robert Howe, deceased and DNC
+      .default = contact_type
+    )
+  ) |>
   # filter(account_type=="Individual", group=="account", id=="38532")
-  filter(account_type=="Individual") |> 
-  filter(group=="account" |
-           (group=="household" & str_detect(contact_type, "Primary Household Contact"))) |> 
+  filter(account_type == "Individual") |>
+  filter(
+    group == "account" |
+      (group == "household" &
+        str_detect(contact_type, "Primary Household Contact"))
+  ) |>
   # captures PHC in combination with anything else CAUTION: keeps company contacts
-  select(id, name, group, primary_contact=fullname, contact_type, deceased, donotcontact)
+  select(
+    id,
+    name,
+    group,
+    primary_contact = fullname,
+    contact_type,
+    deceased,
+    donotcontact
+  )
 
 # force hhid keeps
-force_keeps <- c("403",  # Bloomington
-                 "530" , # Brand
-                 "1620" # Aldrich
-                 )
+force_keeps <- c(
+  "403", # Bloomington
+  "530", # Brand
+  "1620" # Aldrich
+)
 
-  # special hhid drops related to Judy
+# special hhid drops related to Judy
 force_drops <- c("224") # Caroline Eastman
 
 ```
@@ -171,35 +113,57 @@ force_drops <- c("224") # Caroline Eastman
 #| label: alix-table1
 
 # get hh by fiscal year
-don1 <- donations |> 
-  filter(account_type=="Individual") |> 
-  filter(donation_type %in% c("DONATION", "PLEDGEPAYMENT"), donation_status=="SUCCEEDED") |> 
-filter(donation_date <= "2025-06-30") |> 
-  mutate(hhfy = ifelse(month(donation_date) >= 7, year(donation_date) + 1, year(donation_date)))
-         
+don1 <- donations |>
+  filter(account_type == "Individual") |>
+  filter(
+    donation_type %in% c("DONATION", "PLEDGEPAYMENT"),
+    donation_status == "SUCCEEDED"
+  ) |>
+  filter(donation_date <= "2025-06-30") |>
+  mutate(
+    hhfy = ifelse(
+      month(donation_date) >= 7,
+      year(donation_date) + 1,
+      year(donation_date)
+    )
+  )
+
 # get summaries for each household across ALL donations
-ns(don1) 
+ns(don1)
 skim(don1) # no missing donations
 
 idvars <- c("id", "name", "group", "hhid", "hhname", "accountid")
 
-hhalldon <- don1 |> 
-  group_by(id, name) |> 
-  mutate(donation_all=sum(donation),
-         donation_last5years = sum(donation[hhfy %in% 2021:2025]),
-         donation_max=max(donation),
-         n_max_donation = sum(donation == donation_max, na.rm = TRUE),
-         date_of_max = donation_date[donation == donation_max][1],
-         campaign_of_max = campaign[donation == donation_max][1],
-         last_donation_date = max(donation_date),
-         fy_of_last_donation = hhfy[donation_date == last_donation_date][1],
-         total_donation_latest_donation_fy = sum(donation[hhfy==fy_of_last_donation])
-         ) |> 
-  slice_head(n = 1) |> 
-  ungroup() |> 
-  arrange(desc(donation_all), id) |> 
-  select(any_of(idvars), donation_all, donation_last5years, donation_max, n_max_donation, date_of_max, campaign_of_max,
-         last_donation_date, fy_of_last_donation, total_donation_latest_donation_fy)
+hhalldon <- don1 |>
+  group_by(id, name) |>
+  mutate(
+    donation_all = sum(donation),
+    donation_last5years = sum(donation[hhfy %in% 2021:2025]),
+    donation_max = max(donation),
+    n_max_donation = sum(donation == donation_max, na.rm = TRUE),
+    date_of_max = donation_date[donation == donation_max][1],
+    campaign_of_max = campaign[donation == donation_max][1],
+    last_donation_date = max(donation_date),
+    fy_of_last_donation = hhfy[donation_date == last_donation_date][1],
+    total_donation_latest_donation_fy = sum(donation[
+      hhfy == fy_of_last_donation
+    ])
+  ) |>
+  slice_head(n = 1) |>
+  ungroup() |>
+  arrange(desc(donation_all), id) |>
+  select(
+    any_of(idvars),
+    donation_all,
+    donation_last5years,
+    donation_max,
+    n_max_donation,
+    date_of_max,
+    campaign_of_max,
+    last_donation_date,
+    fy_of_last_donation,
+    total_donation_latest_donation_fy
+  )
 
 ```
 
@@ -207,12 +171,14 @@ hhalldon <- don1 |>
 ```{r}
 
 ## Bring in additional info
-hhall_enhanced <- hhalldon |> 
-  left_join(acctlink |> select(-c(group)), 
-by = join_by(id, name)) |>
-left_join(contacts |> select(id, name, pfname, plname, address1:pphone), by = join_by(id, name)) |> 
-filter(!deceased, accountid != "36805") |> 
-select(-deceased)
+hhall_enhanced <- hhalldon |>
+  left_join(acctlink |> select(-c(group)), by = join_by(id, name)) |>
+  left_join(
+    contacts |> select(id, name, pfname, plname, address1:pphone),
+    by = join_by(id, name)
+  ) |>
+  filter(!deceased, accountid != "36805") |>
+  select(-deceased)
 
 ns(hhall_enhanced)
 
@@ -226,35 +192,57 @@ ns(hhall_enhanced)
 #| label: alix-table2
 
 # get hh by fiscal year
-don1_2021plus <- don1 |> 
-  filter(account_type=="Individual") |> 
-  mutate(donation_all=sum(donation), .by=c(id, name)) |> 
-  filter(donation_date >= "2020-07-01") |> 
-  filter(donation_type %in% c("DONATION", "PLEDGEPAYMENT"), donation_status=="SUCCEEDED") |> 
-  mutate(hhfy = ifelse(month(donation_date) >= 7, year(donation_date) + 1, year(donation_date)))
-         
+don1_2021plus <- don1 |>
+  filter(account_type == "Individual") |>
+  mutate(donation_all = sum(donation), .by = c(id, name)) |>
+  filter(donation_date >= "2020-07-01") |>
+  filter(
+    donation_type %in% c("DONATION", "PLEDGEPAYMENT"),
+    donation_status == "SUCCEEDED"
+  ) |>
+  mutate(
+    hhfy = ifelse(
+      month(donation_date) >= 7,
+      year(donation_date) + 1,
+      year(donation_date)
+    )
+  )
+
 # get summaries for each household across ALL donations
-ns(don1_2021plus) 
+ns(don1_2021plus)
 skim(don1_2021plus) # no missing donations
 
 idvars <- c("id", "name", "group", "hhid", "hhname", "accountid")
 
-hhalldon_2021plus <- don1_2021plus |> 
-  group_by(id, name) |> 
-  mutate(donation_last5years = sum(donation[hhfy %in% 2021:2025]),
-         donation_max=max(donation),
-         n_max_donation = sum(donation == donation_max, na.rm = TRUE),
-         date_of_max = donation_date[donation == donation_max][1],
-         campaign_of_max = campaign[donation == donation_max][1],
-         last_donation_date = max(donation_date),
-         fy_of_last_donation = hhfy[donation_date == last_donation_date][1],
-         total_donation_latest_donation_fy = sum(donation[hhfy==fy_of_last_donation])
-         ) |> 
-  slice_head(n = 1) |> 
-  ungroup() |> 
-  arrange(desc(donation_last5years), id) |> 
-  select(any_of(idvars), donation_all, donation_last5years, donation_max, n_max_donation, date_of_max, campaign_of_max,
-         last_donation_date, fy_of_last_donation, total_donation_latest_donation_fy)
+hhalldon_2021plus <- don1_2021plus |>
+  group_by(id, name) |>
+  mutate(
+    donation_last5years = sum(donation[hhfy %in% 2021:2025]),
+    donation_max = max(donation),
+    n_max_donation = sum(donation == donation_max, na.rm = TRUE),
+    date_of_max = donation_date[donation == donation_max][1],
+    campaign_of_max = campaign[donation == donation_max][1],
+    last_donation_date = max(donation_date),
+    fy_of_last_donation = hhfy[donation_date == last_donation_date][1],
+    total_donation_latest_donation_fy = sum(donation[
+      hhfy == fy_of_last_donation
+    ])
+  ) |>
+  slice_head(n = 1) |>
+  ungroup() |>
+  arrange(desc(donation_last5years), id) |>
+  select(
+    any_of(idvars),
+    donation_all,
+    donation_last5years,
+    donation_max,
+    n_max_donation,
+    date_of_max,
+    campaign_of_max,
+    last_donation_date,
+    fy_of_last_donation,
+    total_donation_latest_donation_fy
+  )
 
 ```
 
@@ -262,12 +250,14 @@ hhalldon_2021plus <- don1_2021plus |>
 ```{r}
 
 ## Bring in additional info
-hhall_enhanced_2021plus <- hhalldon_2021plus |> 
-  left_join(acctlink |> select(-c(group)), 
-by = join_by(id, name)) |>
-left_join(contacts |> select(id, name, pfname, plname, address1:pphone), by = join_by(id, name)) |> 
-filter(!deceased, accountid != "36805") |> 
-select(-deceased)
+hhall_enhanced_2021plus <- hhalldon_2021plus |>
+  left_join(acctlink |> select(-c(group)), by = join_by(id, name)) |>
+  left_join(
+    contacts |> select(id, name, pfname, plname, address1:pphone),
+    by = join_by(id, name)
+  ) |>
+  filter(!deceased, accountid != "36805") |>
+  select(-deceased)
 
 ns(hhall_enhanced_2021plus)
 
@@ -280,9 +270,16 @@ ns(hhall_enhanced_2021plus)
 
 regorder <- c("performance", "class", "community", "other")
 
-events_data <- events |> 
-  select(event_majorcat, event_category, event_name, event_start_date, eventid, event_code) |> 
-  mutate(event_majorcat=factor(event_majorcat, levels=regorder)) |> 
+events_data <- events |>
+  select(
+    event_majorcat,
+    event_category,
+    event_name,
+    event_start_date,
+    eventid,
+    event_code
+  ) |>
+  mutate(event_majorcat = factor(event_majorcat, levels = regorder)) |>
   arrange(event_majorcat, event_category, eventid, event_name)
 
 range_write(
@@ -297,8 +294,6 @@ range_write(
 
 ```
 
-
-
 ## First cut registrations
 
 ```{r}
@@ -308,43 +303,49 @@ ns(registrations)
 count(registrations, type)
 count(registrations, event_status)
 
-registrations |> 
-  filter(type %in% c("Registrant", "Registrant & Attendee"),
-    event_status=="SUCCEEDED") |> pull(amount) |> sum()
+registrations |>
+  filter(
+    type %in% c("Registrant", "Registrant & Attendee"),
+    event_status == "SUCCEEDED"
+  ) |>
+  pull(amount) |>
+  sum()
 
-reg1 <- registrations |> 
-  filter(!is.na(id)) |> 
-  filter(type %in% c("Registrant", "Registrant & Attendee"),
-event_status=="SUCCEEDED") |> 
-  summarise(amount=sum(amount), .by=c(id, name, group, event_majorcat))
+reg1 <- registrations |>
+  filter(!is.na(id)) |>
+  filter(
+    type %in% c("Registrant", "Registrant & Attendee"),
+    event_status == "SUCCEEDED"
+  ) |>
+  summarise(amount = sum(amount), .by = c(id, name, group, event_majorcat))
 sum(reg1$amount)
 
 donor_events <- hhall_enhanced |>
-  filter(!donotcontact) |> 
-  select(id, name, group, donation_all) |> 
-  left_join(reg1 |> select(-group),
-   by = join_by(id, name)) |> 
-filter(!is.na(event_majorcat)) |> 
-mutate(event_majorcat = factor(event_majorcat, levels=regorder)) |> 
-mutate(event_sum=sum(amount, na.rm=TRUE), .by=c(id, name)) |> 
-arrange(event_majorcat) |> 
-pivot_wider(names_from=event_majorcat, values_from=amount, values_fill=0) |> 
-arrange(desc(donation_all)) |> 
-mutate(event_pct=event_sum / donation_all) |> 
-relocate(event_pct, .before=event_sum) |> 
-filter(row_number() <= 100)
+  filter(!donotcontact) |>
+  select(id, name, group, donation_all) |>
+  left_join(reg1 |> select(-group), by = join_by(id, name)) |>
+  filter(!is.na(event_majorcat)) |>
+  mutate(event_majorcat = factor(event_majorcat, levels = regorder)) |>
+  mutate(event_sum = sum(amount, na.rm = TRUE), .by = c(id, name)) |>
+  arrange(event_majorcat) |>
+  pivot_wider(
+    names_from = event_majorcat,
+    values_from = amount,
+    values_fill = 0
+  ) |>
+  arrange(desc(donation_all)) |>
+  mutate(event_pct = event_sum / donation_all) |>
+  relocate(event_pct, .before = event_sum) |>
+  filter(row_number() <= 100)
 
 
 # Registrants" or "Registrant & Attendees"
 
 ```
 
-
-
 ## Winnow and write to google sheets
 
 ```{r}
-
 
 gs4_auth() # always
 # gswb <- gs4_create("donors") # ONETIME
@@ -365,10 +366,10 @@ ss
 
 glimpse(hhall_enhanced)
 
-dnc <- hhall_enhanced |> 
-  filter(donotcontact, donation_all >= 1000) |> 
-mutate(explanation="") |> 
-relocate(explanation, .after=hhname)
+dnc <- hhall_enhanced |>
+  filter(donotcontact, donation_all >= 1000) |>
+  mutate(explanation = "") |>
+  relocate(explanation, .after = hhname)
 
 # sheet_add(ss, sheet = "do_not_contact")
 
@@ -390,9 +391,9 @@ relocate(explanation, .after=hhname)
 
 glimpse(hhall_enhanced)
 
-top100 <- hhall_enhanced |> 
+top100 <- hhall_enhanced |>
   filter(!donotcontact) |>
-arrange(desc(donation_all))
+  arrange(desc(donation_all))
 
 # sheet_add(ss, sheet = "top100_all_time")
 
@@ -412,9 +413,9 @@ range_write(
 ```{r}
 #| label: top100-last5years
 
-top100_last_5years <- hhall_enhanced_2021plus |> 
+top100_last_5years <- hhall_enhanced_2021plus |>
   filter(!donotcontact) |>
-arrange(desc(donation_last5years))
+  arrange(desc(donation_last5years))
 
 # sheet_add(ss, sheet = "top100_all_time")
 
@@ -442,7 +443,8 @@ range_write(
   sheet = "donor_events",
   range = "A10",
   col_names = TRUE,
-  reformat = FALSE)
+  reformat = FALSE
+)
 
 ```
 
@@ -457,138 +459,11 @@ sum(donor_events$event_sum)
 
 
 
-## OLD below here
-
-
-
-
-We are looking for contact family name, total giving all time, last gift date, last FY total giving amount, and for the top 20% a breakdown of what their gift categories were (we want a complete donor profile, so for each donor we want to see the total contribution amount that includes donations, class purchases, ticket buys, etc.)
-
-
-
-### Top 20% all years
-
-
-```{r}
-
-glimpse(donations)
-ns(donations)
-skim(donations)
-count(donations, account_type)
-count(donations, tender_type)
-count(donations, donation_type)
-count(donations, donation_status)
-count(donations, payment_status)
-
-count(donations, fund)
-count(donations, purpose)
-# count(donations, source) # prob not needed
-
-# We are looking for contact family name, total giving all time, last gift date, last FY total giving amount, and for the top 20% a breakdown of what their gift categories were (we want a complete donor profile, so for each donor we want to see the total contribution amount that includes donations, class purchases, ticket buys, etc.)
-
-don1 <- donations |>
-  filter(account_type == "Individual", donation_type == "DONATION", donation_status == "SUCCEEDED", payment_status == "SUCCEEDED") |>
-  filter(accountid != "36805") |> # cash and miscellaneous credit card transactions
-  select(id, name, group, hhid, hhname, accountid, fullname, donation_date, campaign, fund, purpose, donation) |> # campaign, fund, purpose
-  mutate(hhfy = ifelse(month(donation_date) >= 7, year(donation_date) + 1, year(donation_date))) |> 
-  mutate(last_donation_date=max(donation_date, .by=id, name)
-skim(don1)
-
-# group by hh and hhfy
-donfy <- don1 |>
-  summarise(donation = sum(donation), .by = c(id, name, hhfy))
-
-donsums <- donfy |>
-  summarise(
-    total = sum(donation),
-    before_2021 = sum(donation * (hhfy < 2021)),
-    since_2021 = sum(donation * (hhfy >= 2021)),
-    .by = c(id, name)
-  )
-
-donfywide <- donfy |>
-  arrange(hhfy) |> 
-  pivot_wider(names_from = hhfy, values_from = donation, values_fill = 0)
-
-donfinal <- donsums |>
-  filter(total >= 15) |> 
-  left_join(
-    donfywide |>
-      select(id, name, `2021`:`2026`),
-    by = join_by(id, name)
-  ) |>
-  # left_join(donations |> select(id, name, deceased, donotcontact) |> distinct(), by = join_by(id, name)) |> 
-  arrange(desc(total)) |> 
-  mutate(cumpct_total = cumsum(total) / sum(total)) |>  
-  arrange(desc(since_2021)) |> 
-  mutate(cumpct_2021plus = cumsum(since_2021) / sum(since_2021)) |> 
-  relocate(cumpct_total, cumpct_2021plus, .after = since_2021) 
-donfinal
-# cum_percent = 100 * cumsum(your_variable) / sum(your_variable)
-
-```
-
-
-```{r}
-#| label: write-google-sheet
-
-gs4_auth() # always
-# gswb <- gs4_create("donors") # ONETIME
-# sheet_write(donfinal, gswb, sheet = "all_donors") # writing a full sheet
-
-ssid <- "1xwNYOddcJSRmAvaR9DlT1Aixrs1WciwVYUvv3AzmdM0"
-donors_workbook <- "https://docs.google.com/spreadsheets/d/1xwNYOddcJSRmAvaR9DlT1Aixrs1WciwVYUvv3AzmdM0"
-(ss <- gs4_get(donors_workbook))
-ss
-
-range_write(
-  ss,
-  donfinal |> select(-cumpct_total) |> arrange(desc(since_2021)),
-  sheet = "all_donors_2021plus_sort",
-  range = "A13",
-  col_names = TRUE,
-  reformat = FALSE
-)
-
-range_write(
-  ss,
-  donfinal |> select(-cumpct_2021plus) |> arrange(desc(total)),
-  sheet = "all_donors_allyears_sort",
-  range = "A13",
-  col_names = TRUE,
-  reformat = FALSE
-)
-
-count(events, event_majorcat)
-catorder <- c("performance", "class", "community", "other")
-
-events_data <- events |> 
-  select(event_majorcat, event_category, event_name, event_start_date, eventid, event_code) |> 
-  mutate(event_majorcat=factor(event_majorcat, levels=catorder)) |> 
-  arrange(event_majorcat, event_category, eventid, event_name)
-
-range_write(
-  ss,
-  events_data,
-  sheet = "event_categorizations",
-  range = "A13",
-  col_names = TRUE,
-  reformat = FALSE
-)
-
-
-```
-
-
-### Top 20% 5 years
-
-
-
-
 ## Quick plot: Household donor spending and performances, 2021 plus
 
 ```{r}
 #| label: donations-events
+#| eval: false
 
 glimpse(donations)
 glimpse(registrations)
@@ -644,3 +519,116 @@ comp |>
 
 ```
 
+
+## Investigations to determine how donations should be counted
+
+I compare the items below to Neon query (report) results.
+
+```{r}
+
+names(xljudy)
+
+
+df <- vroom(
+  fs::path(neon, "HH Donor List - All Donations $15+.csv"),
+  col_types = cols(.default = col_character())
+)
+ns(df)
+
+count(donations, account_type)
+count(donations, donation_type)
+count(donations, payment_status)
+count(donations, individual_type)
+
+# filter account level data
+don1 <- donations |>
+  filter(account_type == "Individual") |>
+  # filter(!deceased, !donotcontact) |> # these pertain to the individual account
+  filter(
+    donation_type %in% c("DONATION", "PLEDGEPAYMENT"),
+    donation_status == "SUCCEEDED"
+  ) |>
+  # special drops related to Judy
+  filter(
+    !hhid %in%
+      c("224")
+  ) # Caroline Eastman
+
+# summarise to household level
+don2 <- don1 |>
+  summarise(donation = sum(donation), .by = c(id, name)) |>
+  arrange(desc(donation))
+
+# link to accounts to see if primary householder is deceased or do not contact
+acctlink <- accounts |>
+  # I DON'T YET KNOW WHY I HAVE TO ADJUST Cora Howe -- her partner Robert is listed as primary in the data
+  mutate(
+    contact_type = case_when(
+      hhid == "54" & accountid == "34713" ~ "Primary Household Contact", # Cora May Howe
+      hhid == "54" & accountid == "34712" ~ "Household Contact", # Robert Howe, deceased and DNC
+      .default = contact_type
+    )
+  ) |>
+  # filter(account_type=="Individual", group=="account", id=="38532")
+  filter(account_type == "Individual") |>
+  filter(
+    group == "account" |
+      (group == "household" &
+        str_detect(contact_type, "Primary Household Contact"))
+  ) |>
+  # captures PHC in combination with anything else CAUTION: keeps company contacts
+  select(
+    id,
+    name,
+    group,
+    primary_contact = fullname,
+    contact_type,
+    deceased,
+    donotcontact
+  )
+
+acctlink |> filter(id == "38532")
+acctlink |> filter(str_detect(name, "Brosch"))
+donations |> filter(str_detect(name, "Brosch"))
+
+acctlink |> summarise(n = n(), .by = c(id, name)) |> count(n)
+
+
+don3 <- don2 |>
+  left_join(acctlink, by = join_by(id, name))
+
+ddnc <- don3 |>
+  filter(deceased | donotcontact)
+anyDuplicated(ddnc$id)
+
+
+force_keeps <- c(
+  "403", # Bloomington
+  "530", # Brand
+  "1620" # Aldrich
+)
+don4 <- don3 |>
+  filter(!(id %in% ddnc$id & !id %in% force_keeps)) |>
+  select(-deceased, -donotcontact) |>
+  filter(donation >= 15, id != "36805") |>
+  arrange(desc(donation), as.numeric(id))
+
+skim(don4)
+don4 |> filter(is.na(group))
+don4 |> filter(id == "1620")
+
+don4 |> writexl::write_xlsx(fs::path(work, "don4.xlsx"))
+
+
+donations |>
+  filter(id == "21") |>
+  select(id, name, donation, donation_date, payment_status) |>
+  janitor::adorn_totals()
+donations |>
+  filter(id == "21") |>
+  select(id, name, donation, donation_date, payment_status) |>
+  arrange(donation_date) |>
+  janitor::adorn_totals()
+# this explains it: 21 Wendy Duvall   100.00    2018-09-18       CANCELED
+
+```

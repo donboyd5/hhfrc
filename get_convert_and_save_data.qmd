@@ -19,6 +19,7 @@ hhdr <- here::here("data-raw")
 neon <- fs::path(hhdr, "neon")
 judy <- fs::path(hhdr, "judy")
 rds <- fs::path(hhdr, "rds")
+work <- fs::path(hhdr, "work")
 
 ```
 
@@ -143,6 +144,8 @@ vnames <- read_csv(
   "
 )
 vnames
+
+writexl::write_xlsx(vnames, fs::path(work, "vnames.xlsx"))
 
 # "Event ID"   "Event Name" "Category"   "Topic"      "Code"       "Attendees"  "Waitlisted" "Starts On"  "Status"     "Ends On"    "...11"
 

@@ -30,124 +30,24 @@ Map my variable names to neon names so that I have consistent names across files
 ```{r}
 #| label: variable-mapping
 
-# lookup <- c(pl = "Petal.Length", sl = "Sepal.Length")
-# rename(iris, all_of(lookup)) # use any_of() if some are not in the data
-
-# create a lookup vector from a tibble:
-# lookup <- deframe(vnames[, c("newname", "oldname")])
-
-# donations: "Household Name","Donation ID","Account ID","Shopping Cart ID","Campaign ID","Donation Amount","Donation Date","Account Type","Full Name (F)","Company Name","City","Address Line 1","State/Province","Zip Code","Campaign Name","Purpose","Fund","Tender Type","Tribute Full Name (F)","DAFpay Advisor Account ID","DAFpay Advisor Account Name","DAFpay Grant ID","DAFpay Note","DAFpay Status","Deceased","Do Not Contact"
-
-# accounts: "Account Type","Account ID","Household ID","Activity Contact Account ID","Activity ID","Company ID","Group Primary Member ID","Import ID","Household Name","Full Name (F)","Company Name","Full Street Address (F)","City","State/Province","Email 1","Contact Type","Do Not Contact","Deceased","Account Note","Partner and Children (C)","All Registration Amount","All Donation Amount","Gender",
-
-# events: "Event ID"   "Event Name" "Category"   "Topic"      "Code"       "Attendees"  "Waitlisted" "Starts On"  "Status"     "Ends On"    "...11"
-
-# registrations: "Account ID","Account Name","Amount","Event","Notes","Starts On","Payment","Created Date","Created By","Last Modified Date","Last Modified By","Type","System Updates","Campaign","Registered On","Status"
-
-# put major id information first and then have blocks for different kinds of variables
-
-# Status  can ?? mean different things in different contexts so we may rename it to events_status, regs_status, etc.
-# Starts on and Ends on appear ?? similar in that meaning depends on context
-
-#  [1] "accountid"          "account_name"        "start_date"         "Payment"
-#  [8] "Created Date"       "Created By"         "Last Modified Date" "Last Modified By"   "Type"               "System Updates"     "Campaign"
-# [15] "Registered On"      "status"             "...17"
-
-# CAUTION: note that event name is called Event in the Events file, and Event Name in the registrations file. The code below deals properly with this.
-
-vnames <- read_csv(
-  "vname, neon, sources  
-  hhid, Household ID, accounts
-  hhname, Household Name, donor-accounts
-  hhacctname, Household Name/Account Name, hhreport
-  groupaccountid, Group Primary Member ID, accounts
-  partnerchild, Partner and Children (C), accounts
-  gender, Gender, accounts
-
-  accountid, Account ID, donor
-  account_name, Account Name, regs
-  account_type, Account Type, donor 
-  companyid, Company ID, accounts
-  company_name, Company Name, donor-accounts
-
-  deceased, Deceased, donor-accounts
-  donotcontact, Do Not Contact, donor-accounts
-
-  status, Status, events-regs
-  start_date, Starts On, events
-  end_date, Ends On, events  
-  notes, Notes, regs
-  amount, Amount, regs
-  payment_method, Payment, regs
-  created_date, Created Date, regs
-  created_by, Created By, regs
-  last_mod_date, Last Modified Date, regs
-  last_mod_by, Last Modified By, regs
-  type, Type, regs
-  sysupdt, System Updates, regs
-  campaign, Campaign, regs
-  registered_date, Registered On, regs
-
-  activityid, Activity ID, accounts
-  activity_contactid, Activity Contact Account ID, accounts
-  importid, Import ID, accounts
-  contact_type, Contact Type, accounts
-  account_note, Account Note, accounts
-  reg_allamount, All Registration Amount, accounts
-  donation_allamount, All Donation Amount, accounts
-
-  shopcartid, Shopping Cart ID, donor
-  campaignid, Campaign ID, donor
-  campaign, Campaign Name, donor
-  purpose, Purpose, donor
-  fund, Fund, donor
-  donation_status, Donation Status, donor
-  payment_status, Payment Status, donor
-  
-  donation_type, Donation Type, donor
-  individual_type, Individual Type, donor
-  tribute_type, Tribute Type, donor
-  tender_type, Tender Type, donor
-
-  fullname, Full Name (F), donor-accounts
-  salutation, Household Salutation / Preferred Name, hhreport
-  city, City, donor
-  address1, Address Line 1, donor
-  address2, Address Line 2, hhreport
-  state, State/Province, donor
-  zip, Zip Code, donor
-  fulladdress, Full Street Address (F), accounts
-  email1, Email 1, accounts
-  pemail, Primary Contact Email, hhreport
-  pfname, Primary Contact First Name, hhreport
-  plname, Primary Contact Last Name, hhreport
-  pphone, Primary Contact Phone, hhreport
-
-  donation, Donation Amount, donor
-  donationid, Donation ID, donor  
-  donation_date, Donation Date, donor  
-  tribute_fullname, Tribute Full Name (F), donor  
-  dafadvisorid, DAFpay Advisor Account ID, donor
-  dafadvisorname, DAFpay Advisor Account Name, donor
-  dafgrantid, DAFpay Grant ID, donor
-  dafstatus, DAFpay Status, donor
-  dafnote, DAFpay Note, donor
-
-  eventid, Event ID, events
-  event_name, Event Name, events
-  event_name, Event, regs
-  event_category, Category, events
-  event_topic, Topic, events
-  event_code, Code, events
-  event_attendees, Attendees, events
-  event_waitlisted, Waitlisted, events
-  "
+fpath <- fs::path(neon, "boyd_neon_metadata.xlsx")
+vnames <- readxl::read_excel(
+  fpath,
+  sheet = "variable_lookups",
+  range = cell_cols("A:I"),
+  col_types = "text"
 )
-vnames
 
-writexl::write_xlsx(vnames, fs::path(work, "vnames.xlsx"))
+glimpse(vnames)
+vnames$neon
+anyDuplicated(vnames$vname)
+anyDuplicated(vnames$neon)
 
-# "Event ID"   "Event Name" "Category"   "Topic"      "Code"       "Attendees"  "Waitlisted" "Starts On"  "Status"     "Ends On"    "...11"
+# which if any variable names have we duplicated?
+vnames |>
+  group_by(vname) |>
+  filter(n() > 1) |>
+  ungroup()
 
 lookup <- deframe(vnames[, c("vname", "neon")])
 lookup
@@ -155,6 +55,41 @@ sort(lookup)
 
 ```
 
+```{r}
+
+# look for variables that are not in vnames so we can add them
+fname <- "export (8).csv"
+fpath <- fs::path(work, fname)
+
+df <- vroom(
+  fpath,
+  col_types = cols(.default = col_character())
+)
+
+setdiff(names(df), lookup)
+
+newvars <- tibble(neon = setdiff(names(df), lookup)) |>
+  filter(!str_starts(neon, fixed("..."))) |>
+  mutate(
+    tentative = str_to_lower(neon),
+    tentative = str_remove_all(tentative, "\\?"),
+    tentative = str_remove_all(tentative, "\\."),
+    tentative = str_remove_all(tentative, "\\-"),
+    tentative = str_remove_all(tentative, "\\(c\\)"),
+    tentative = str_remove_all(tentative, "\\(f\\)"),
+    tentative = str_replace(tentative, "phone ", "phone"),
+    tentative = str_replace(tentative, "line ", "line"),
+    tentative = str_trim(tentative),
+    tentative = str_replace_all(tentative, " ", "_")
+  )
+
+writexl::write_xlsx(
+  newvars,
+  fs::path(work, "newnames.xlsx")
+)
+
+
+```
 
 ## Household contact information
 

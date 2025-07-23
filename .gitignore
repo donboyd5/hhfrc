@@ -21,6 +21,7 @@ site_libs/
 # file types
 *.html
 *.xl*
+!data-raw/neon/boyd_neon_metadata.xlsx
 
 # files
 

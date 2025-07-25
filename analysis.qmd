@@ -72,8 +72,8 @@ acctlink <- accounts |>
   # I DON'T YET KNOW WHY I HAVE TO ADJUST Cora Howe -- her partner Robert is listed as primary in the data
   mutate(
     contact_type = case_when(
-      hhid == "54" & accountid == "34713" ~ "Primary Household Contact", # Cora May Howe
-      hhid == "54" & accountid == "34712" ~ "Household Contact", # Robert Howe, deceased and DNC
+      household_id == "54" & accountid == "34713" ~ "Primary Household Contact", # Cora May Howe
+      household_id == "54" & accountid == "34712" ~ "Household Contact", # Robert Howe, deceased and DNC
       .default = contact_type
     )
   ) |>
@@ -95,14 +95,14 @@ acctlink <- accounts |>
     do_not_contact
   )
 
-# force hhid keeps
+# force household_id keeps
 force_keeps <- c(
   "403", # Bloomington
   "530", # Brand
   "1620" # Aldrich
 )
 
-# special hhid drops related to Judy
+# special household_id drops related to Judy
 force_drops <- c("224") # Caroline Eastman
 
 ```
@@ -132,7 +132,7 @@ don1 <- donations |>
 ns(don1)
 skim(don1) # no missing donations
 
-idvars <- c("id", "name", "group", "hhid", "hh_name", "accountid")
+idvars <- c("id", "name", "group", "household_id", "hh_name", "accountid")
 
 hhalldon <- don1 |>
   group_by(id, name) |>
@@ -212,7 +212,7 @@ don1_2021plus <- don1 |>
 ns(don1_2021plus)
 skim(don1_2021plus) # no missing donations
 
-idvars <- c("id", "name", "group", "hhid", "hh_name", "accountid")
+idvars <- c("id", "name", "group", "household_id", "hh_name", "accountid")
 
 hhalldon_2021plus <- don1_2021plus |>
   group_by(id, name) |>
@@ -488,7 +488,7 @@ don1 <- donations |>
 regs1 <- registrations |>
   filter(year(event_start_date) >= 2021) |>
   filter(str_detect(type, "Registrant"), event_status == "SUCCEEDED") |>
-  select(id, name, group, hhid, hh_name, accountid, account_name, amount)
+  select(id, name, group, household_id, hh_name, accountid, account_name, amount)
 skim(regs1)
 
 regs2 <- regs1 |>
@@ -500,7 +500,7 @@ regs2 <- regs1 |>
 regs1 |> filter(is.na(id))
 
 comp <- don1 |>
-  left_join(regs1, by = join_by(hhid, hh_name)) |>
+  left_join(regs1, by = join_by(household_id, hh_name)) |>
   mutate(amount = replace_na(amount, 0))
 skim(comp)
 
@@ -550,7 +550,7 @@ don1 <- donations |>
   ) |>
   # special drops related to Judy
   filter(
-    !hhid %in%
+    !household_id %in%
       c("224")
   ) # Caroline Eastman
 
@@ -564,8 +564,8 @@ acctlink <- accounts |>
   # I DON'T YET KNOW WHY I HAVE TO ADJUST Cora Howe -- her partner Robert is listed as primary in the data
   mutate(
     contact_type = case_when(
-      hhid == "54" & accountid == "34713" ~ "Primary Household Contact", # Cora May Howe
-      hhid == "54" & accountid == "34712" ~ "Household Contact", # Robert Howe, deceased and DNC
+      household_id == "54" & accountid == "34713" ~ "Primary Household Contact", # Cora May Howe
+      household_id == "54" & accountid == "34712" ~ "Household Contact", # Robert Howe, deceased and DNC
       .default = contact_type
     )
   ) |>

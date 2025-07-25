@@ -61,6 +61,18 @@ This is a Quarto book project for the Hubbard Hall Fundraising Committee, analyz
 
 The project uses an iterative variable mapping function (`vmap()`) in `get_convert_and_save_data.qmd:49` to standardize Neon CRM field names into consistent R variable names. This mapping is stored in Excel files and RDS format for reuse.
 
+**Key Variable Name Mappings:**
+- Neon field names are converted to lowercase with underscores
+- Common mappings include:
+  - `Full Name` → `full_name`
+  - `HH Name` → `hh_name` 
+  - `HH Acct Name` → `hh_acct_name`
+  - `Do Not Contact` → `do_not_contact`
+  - `Full Address` → `full_address`
+  - Donation/registration amounts: `reg_all_amount`, `donation_all_amount`
+
+The complete mapping is maintained in `data-raw/rds/variable_lookup.rds` and applied via the `lookup` vector using `rename(any_of(lookup))`.
+
 ### Output
 
 - Generated book is published to `_web/` directory

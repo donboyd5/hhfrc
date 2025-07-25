@@ -318,14 +318,14 @@ linkages <- accounts |>
   filter(account_type == "Individual") |>
   select(
     household_id,
-    hh_name,
-    accountid,
+    household_name,
+    account_id,
     full_name,
-    full_address,
+    full_street_address,
     city,
-    state
+    state_province
   ) |>
-  arrange(as.integer(household_id), as.integer(accountid))
+  arrange(as.integer(household_id), as.integer(account_id))
 
 saveRDS(linkages, fs::path(rds, "linkages.rds"))
 

@@ -23,70 +23,157 @@ work <- fs::path(hhdr, "work")
 
 ```
 
-## Define variable mapping
+## Define variable mapping -- RUN THIS MANUALLY!! -- ONETIME
 
 Map my variable names to neon names so that I have consistent names across files.
 
+### Iteratively improve variable name mapping
+
+This is an iterative process: 
+
+-   get a starter set of neon names and my variable names in my xlsx metadata files in the neon folder
+-   read a report exported as csv from neon, in the neon folder
+-   find any neon names in the report that aren't in the starter set of neon names
+-   create variable names using simple rules:
+      - lower case
+      - remove certain characters (e.g., "?.-")
+      - remove certain character sets (e.g., "(c)" and "(f)")
+      - remove space after "phone " and "line " so that "phone 2" becomes "phone2", etc.
+      - trim white space at ends
+      - replace / and space with _
+-   repeat
+
 ```{r}
-#| label: variable-mapping
+#| label: variable-mapping-function
 
-fpath <- fs::path(neon, "boyd_neon_metadata.xlsx")
-vnames <- readxl::read_excel(
-  fpath,
-  sheet = "variable_lookups",
-  range = cell_cols("A:I"),
-  col_types = "text"
-)
-
-glimpse(vnames)
-vnames$neon
-anyDuplicated(vnames$vname)
-anyDuplicated(vnames$neon)
-
-# which if any variable names have we duplicated?
-vnames |>
-  group_by(vname) |>
-  filter(n() > 1) |>
-  ungroup()
-
-lookup <- deframe(vnames[, c("vname", "neon")])
-lookup
-sort(lookup)
+vmap <- function(neon) {
+  # neon is an input vector of neon names
+  # vname is a vector of my variable names, mapped to neon
+  neon |>
+    str_to_lower() |>
+    str_remove_all("\\?") |>
+    str_remove_all("\\.") |>
+    str_remove_all("-") |>
+    str_remove_all("\\(c\\)|\\(f\\)") |>
+    # Remove space after 'phone' and 'line' if followed by a number
+    str_replace_all("phone (?=\\d)", "phone") |>
+    str_replace_all("line ", "line") |>
+    # Replace slashes and any surrounding whitespace with a single underscore
+    str_replace_all("\\s*/\\s*", "_") |>
+    # Replace any run of whitespace with a single underscore
+    str_replace_all("\\s+", "_") |>
+    # Trim any leading/trailing underscores that might appear
+    str_replace_all("^_+|_+$", "")
+}
 
 ```
 
+
 ```{r}
+#| label: get-preliminary-mapped-vnames
+#| eval: false
+
+# To get started from scratch, get my early attempt to create metadata -- a .xlsx file:
+# fpath <- fs::path(neon, "boyd_neon_metadata.xlsx")
+# vnames <- readxl::read_excel(
+#   fpath,
+#   sheet = "variable_lookups",
+#   range = cell_cols("A:D"),
+#   col_types = "text"
+# )
+
+# saveRDS(vnames, fs::path(work, "prelim_variable_lookup.rds"))
+
+# if prelim_variable_lookup.rds exists, start with it and extend it
+vnames <- readRDS(fs::path(work, "prelim_variable_lookup.rds"))
+
+# if we have neon names but not yet my local names, run vmap on the neon names:
+# vnames <- vnames |>
+#   mutate(vname = vmap(neon))
+# saveRDS(vnames, fs::path(work, "prelim_variable_lookup.rds"))
+
+glimpse(vnames)
+vnames$neon
+vnames$vname
+anyDuplicated(vnames$vname)
+anyDuplicated(vnames$neon)
+# vmap(vnames$neon)
+neon_names <- c(vnames$neon)
+
+# which if any variable names have we duplicated?
+# vnames |>
+#   group_by(vname) |>
+#   filter(n() > 1) |>
+#   ungroup()
+
+# vnames <- readRDS(fs::path(rds, "variable_lookup.rds"))
+# lookup <- deframe(vnames[, c("vname", "neon")])
+# lookup
+# sort(lookup)
+
+```
+
+Now get report exports and other csv files from Neon. Save to the work folder, map variable names, and update work/prelim_variable_lookup.rds.
+
+```{r}
+#| label: read-new-neon-output
+#| eval: false
 
 # look for variables that are not in vnames so we can add them
-fname <- "export (8).csv"
+fname <- "export (4).csv"
 fpath <- fs::path(work, fname)
 
-df <- vroom(
+newdf <- vroom(
   fpath,
   col_types = cols(.default = col_character())
 )
 
-setdiff(names(df), lookup)
+setdiff(names(newdf), neon_names) # what neon variables are in the new file that aren't in the
 
-newvars <- tibble(neon = setdiff(names(df), lookup)) |>
+base <- tibble(neon = setdiff(names(newdf), neon_names))
+
+newvars <- base |>
   filter(!str_starts(neon, fixed("..."))) |>
-  mutate(
-    tentative = str_to_lower(neon),
-    tentative = str_remove_all(tentative, "\\?"),
-    tentative = str_remove_all(tentative, "\\."),
-    tentative = str_remove_all(tentative, "\\-"),
-    tentative = str_remove_all(tentative, "\\(c\\)"),
-    tentative = str_remove_all(tentative, "\\(f\\)"),
-    tentative = str_replace(tentative, "phone ", "phone"),
-    tentative = str_replace(tentative, "line ", "line"),
-    tentative = str_trim(tentative),
-    tentative = str_replace_all(tentative, " ", "_")
-  )
+  mutate(vname = vmap(neon)) |>
+  select(vname, neon)
+newvars
 
-writexl::write_xlsx(
-  newvars,
-  fs::path(work, "newnames.xlsx")
-)
+vnames
+
+updated_lookup <- bind_rows(vnames, newvars) |>
+  arrange(neon, vname)
+
+saveRDS(updated_lookup, fs::path(work, "prelim_variable_lookup.rds"))
+
+# writexl::write_xlsx(
+#   vnames,
+#   fs::path(work, "vnames.xlsx")
+# )
+
+```
+
+### Get the current iteratively improved lookup file and save in the rds folder
+
+When all done updating the preliminary lookup file (work/prelim_variable_lookup.rds), get it from work/ and save it to rds/ without the "prelim" suffix.
+
+```{r}
+#| label: write-lookup-to-rds
+
+lookup <- readRDS(fs::path(work, "prelim_variable_lookup.rds"))
+# examine lookup
+saveRDS(lookup, fs::path(rds, "variable_lookup.rds"))
+
+```
+
+## Get latest lookup information and create a lookup vector
+
+```{r}
+#| label: get-lookup
+
+variable_lookup <- readRDS(fs::path(rds, "variable_lookup.rds"))
+
+lookup <- deframe(variable_lookup[, c("vname", "neon")])
+lookup
 
 
 ```
@@ -111,12 +198,12 @@ glimpse(contacts1)
 # nrows <- acct1 |> distinct() |> nrow()
 
 contacts2 <- contacts1 |>
-  rename(any_of(lookup))
+  rename(any_of(lookup)) |>
+  select(-starts_with("..."))
 ns(contacts2)
 skim(contacts2)
 
 contacts3 <- contacts2 |>
-  select(-...14) |>
   mutate(
     id = ifelse(is.na(hhid), accountid, hhid),
     name = hhacctname,

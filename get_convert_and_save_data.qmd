@@ -206,7 +206,7 @@ skim(contacts2)
 contacts3 <- contacts2 |>
   mutate(
     id = ifelse(is.na(hhid), accountid, hhid),
-    name = hhacctname,
+    name = hh_acct_name,
     group = case_when(
       !is.na(hhid) ~ "household",
       !is.na(accountid) ~ "account",
@@ -256,7 +256,7 @@ acct2 <- acct1 |>
 glimpse(acct2)
 skim(acct2) # drop ...24, activity_contactid, activityid, gender
 count(acct2, importid) # drop its only values are 10 and 4 with most missing
-count(acct2, donotcontact)
+count(acct2, do_not_contact)
 count(acct2, deceased)
 
 drops <- c(
@@ -272,14 +272,14 @@ drops <- c(
 acct3 <- acct2 |>
   select(-any_of(drops)) |>
   mutate(
-    reg_allamount = parse_number(reg_allamount),
-    donation_allamount = parse_number(donation_allamount),
-    donotcontact = donotcontact == "Yes",
+    reg_all_amount = parse_number(reg_all_amount),
+    donation_all_amount = parse_number(donation_all_amount),
+    do_not_contact = do_not_contact == "Yes",
     deceased = deceased == "Yes"
   ) |>
   mutate(
     id = ifelse(is.na(hhid), accountid, hhid),
-    name = ifelse(is.na(hhname), fullname, hhname),
+    name = ifelse(is.na(hh_name), full_name, hh_name),
     group = case_when(
       !is.na(hhid) ~ "household",
       !is.na(accountid) ~ "account",
@@ -315,7 +315,7 @@ ns(accounts)
 
 linkages <- accounts |>
   filter(account_type == "Individual") |>
-  select(hhid, hhname, accountid, fullname, fulladdress, city, state) |>
+  select(hhid, hh_name, accountid, full_name, full_address, city, state) |>
   arrange(as.integer(hhid), as.integer(accountid))
 
 saveRDS(linkages, fs::path(rds, "linkages.rds"))
@@ -365,7 +365,7 @@ don3 <- don2 |>
     donation_date = mdy(donation_date),
     donation = parse_number(donation),
     deceased = deceased == "Yes",
-    donotcontact = donotcontact == "Yes"
+    do_not_contact = do_not_contact == "Yes"
   )
 # the fields that cause problems in parse_number are shown as NA in the source data, so ok
 
@@ -396,19 +396,19 @@ ns(linkages)
 
 donations <- donations_no_hhid |>
   left_join(
-    linkages |> select(hhname, hhid, accountid),
-    by = join_by(hhname, accountid)
+    linkages |> select(hh_name, hhid, accountid),
+    by = join_by(hh_name, accountid)
   ) |>
   mutate(
     id = ifelse(is.na(hhid), accountid, hhid),
-    name = ifelse(is.na(hhname), fullname, hhname),
+    name = ifelse(is.na(hh_name), full_name, hh_name),
     group = case_when(
       !is.na(hhid) ~ "household",
       !is.na(accountid) ~ "account",
       .default = "other"
     )
   ) |>
-  select(id, name, group, hhid, hhname, accountid, fullname, everything())
+  select(id, name, group, hhid, hh_name, accountid, full_name, everything())
 
 glimpse(donations)
 count(donations, group)
@@ -659,7 +659,7 @@ saveRDS(regs3, fs::path(rds, "registrations_no_eventid.rds"))
 ```
 
 
-## Put eventid, event_code, event_majorcat, ..., hhid, and hhname on registrations file
+## Put eventid, event_code, event_majorcat, ..., hhid, and hh_name on registrations file
 
 ```{r}
 #| label: eventid-on-registrations
@@ -685,12 +685,12 @@ regsid <- regsnoid |>
     by = join_by(event_name, event_start_date)
   ) |> # including event_start_date in join is crucial and needed to ensure unique matches
   left_join(
-    linkages |> select(accountid, account_name = fullname, hhid, hhname),
+    linkages |> select(accountid, account_name = full_name, hhid, hh_name),
     by = join_by(accountid, account_name)
   ) |>
   mutate(
     id = ifelse(is.na(hhid), accountid, hhid),
-    name = ifelse(is.na(hhname), account_name, hhname),
+    name = ifelse(is.na(hh_name), account_name, hh_name),
     group = case_when(
       !is.na(hhid) ~ "household",
       !is.na(accountid) ~ "account",
@@ -702,7 +702,7 @@ regsid <- regsnoid |>
     name,
     group,
     hhid,
-    hhname,
+    hh_name,
     accountid,
     account_name,
     eventid,

@@ -2,6 +2,8 @@ project:
   type: book
   output-dir: _web
   
+# MAYBE ending GoogleDriveFS.exe will fix the hangup using resource monitor
+
 execute:
   eval: true
   echo: true

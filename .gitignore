@@ -17,11 +17,15 @@ data-raw/judy/
 data-raw/rds/
 libs/
 site_libs/
+work/
 
 # file types
 *.html
 *.xl*
-!data-raw/neon/boyd_neon_metadata.xlsx
+
+# exceptions
+!data-raw/work/boyd_neon_metadata.xlsx
+!data-raw/work/prelim_variable_lookup.rds
 
 # files
 

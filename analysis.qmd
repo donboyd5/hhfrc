@@ -89,10 +89,10 @@ acctlink <- accounts |>
     id,
     name,
     group,
-    primary_contact = fullname,
+    primary_contact = full_name,
     contact_type,
     deceased,
-    donotcontact
+    do_not_contact
   )
 
 # force hhid keeps
@@ -132,7 +132,7 @@ don1 <- donations |>
 ns(don1)
 skim(don1) # no missing donations
 
-idvars <- c("id", "name", "group", "hhid", "hhname", "accountid")
+idvars <- c("id", "name", "group", "hhid", "hh_name", "accountid")
 
 hhalldon <- don1 |>
   group_by(id, name) |>
@@ -212,7 +212,7 @@ don1_2021plus <- don1 |>
 ns(don1_2021plus)
 skim(don1_2021plus) # no missing donations
 
-idvars <- c("id", "name", "group", "hhid", "hhname", "accountid")
+idvars <- c("id", "name", "group", "hhid", "hh_name", "accountid")
 
 hhalldon_2021plus <- don1_2021plus |>
   group_by(id, name) |>
@@ -321,7 +321,7 @@ reg1 <- registrations |>
 sum(reg1$amount)
 
 donor_events <- hhall_enhanced |>
-  filter(!donotcontact) |>
+  filter(!do_not_contact) |>
   select(id, name, group, donation_all) |>
   left_join(reg1 |> select(-group), by = join_by(id, name)) |>
   filter(!is.na(event_majorcat)) |>
@@ -367,9 +367,9 @@ ss
 glimpse(hhall_enhanced)
 
 dnc <- hhall_enhanced |>
-  filter(donotcontact, donation_all >= 1000) |>
+  filter(do_not_contact, donation_all >= 1000) |>
   mutate(explanation = "") |>
-  relocate(explanation, .after = hhname)
+  relocate(explanation, .after = hh_name)
 
 # sheet_add(ss, sheet = "do_not_contact")
 
@@ -392,7 +392,7 @@ dnc <- hhall_enhanced |>
 glimpse(hhall_enhanced)
 
 top100 <- hhall_enhanced |>
-  filter(!donotcontact) |>
+  filter(!do_not_contact) |>
   arrange(desc(donation_all))
 
 # sheet_add(ss, sheet = "top100_all_time")
@@ -414,7 +414,7 @@ range_write(
 #| label: top100-last5years
 
 top100_last_5years <- hhall_enhanced_2021plus |>
-  filter(!donotcontact) |>
+  filter(!do_not_contact) |>
   arrange(desc(donation_last5years))
 
 # sheet_add(ss, sheet = "top100_all_time")
@@ -472,7 +472,7 @@ cashcc <- donations |> filter(accountid == "36805")
 sum(cashcc$donation) # 26317.43
 
 don1 <- donations |>
-  rename(account_name = fullname) |>
+  rename(account_name = full_name) |>
   filter(account_type == "Individual", year(donation_date) >= 2021) |>
   filter(
     !str_detect(account_name, "Cash and Credit Card Miscellaneous Transactions")
@@ -488,19 +488,19 @@ don1 <- donations |>
 regs1 <- registrations |>
   filter(year(event_start_date) >= 2021) |>
   filter(str_detect(type, "Registrant"), event_status == "SUCCEEDED") |>
-  select(id, name, group, hhid, hhname, accountid, account_name, amount)
+  select(id, name, group, hhid, hh_name, accountid, account_name, amount)
 skim(regs1)
 
 regs2 <- regs1 |>
   summarise(amount = sum(amount, na.rm = TRUE), .by = c(id, name, group)) |>
   arrange(desc(amount))
 
-#  acccount id	name 36805	Cash and Credit Card Miscellaneous Transactions in 2021 plus was 28 transactions, $3890, all donotcontact
+#  acccount id	name 36805	Cash and Credit Card Miscellaneous Transactions in 2021 plus was 28 transactions, $3890, all do_not_contact
 
 regs1 |> filter(is.na(id))
 
 comp <- don1 |>
-  left_join(regs1, by = join_by(hhid, hhname)) |>
+  left_join(regs1, by = join_by(hhid, hh_name)) |>
   mutate(amount = replace_na(amount, 0))
 skim(comp)
 
@@ -543,7 +543,7 @@ count(donations, individual_type)
 # filter account level data
 don1 <- donations |>
   filter(account_type == "Individual") |>
-  # filter(!deceased, !donotcontact) |> # these pertain to the individual account
+  # filter(!deceased, !do_not_contact) |> # these pertain to the individual account
   filter(
     donation_type %in% c("DONATION", "PLEDGEPAYMENT"),
     donation_status == "SUCCEEDED"
@@ -581,10 +581,10 @@ acctlink <- accounts |>
     id,
     name,
     group,
-    primary_contact = fullname,
+    primary_contact = full_name,
     contact_type,
     deceased,
-    donotcontact
+    do_not_contact
   )
 
 acctlink |> filter(id == "38532")
@@ -598,7 +598,7 @@ don3 <- don2 |>
   left_join(acctlink, by = join_by(id, name))
 
 ddnc <- don3 |>
-  filter(deceased | donotcontact)
+  filter(deceased | do_not_contact)
 anyDuplicated(ddnc$id)
 
 
@@ -609,7 +609,7 @@ force_keeps <- c(
 )
 don4 <- don3 |>
   filter(!(id %in% ddnc$id & !id %in% force_keeps)) |>
-  select(-deceased, -donotcontact) |>
+  select(-deceased, -do_not_contact) |>
   filter(donation >= 15, id != "36805") |>
   arrange(desc(donation), as.numeric(id))
 

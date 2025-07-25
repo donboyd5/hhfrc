@@ -462,34 +462,29 @@ ns(ev1)
 
 ev2 <- ev1 |>
   select(-starts_with("...")) |>
-  rename(any_of(lookup)) |>
-  rename(
-    event_status = status,
-    event_start_date = start_date,
-    event_end_date = end_date
-  )
+  rename(any_of(lookup))
 names(ev2)
 glimpse(ev2)
-count(ev2, event_topic) # has names of people for some events -- KEEP
-count(ev2, event_code) # don't know what it is, but not blank, appears to be a date -- KEEP
-count(ev2, event_attendees) # should be integer
-count(ev2, event_waitlisted) # "0" for all -- DROP
-count(ev2, event_start_date) # mm/dd/yyyy
-count(ev2, event_end_date) # mm/dd/yyyy
-count(ev2, event_status) # ACTIVE or INACTIVE -- KEEP
+count(ev2, topic) # has names of people for some events -- KEEP
+count(ev2, code) # don't know what it is, but not blank, appears to be a date -- KEEP
+count(ev2, attendees) # should be integer
+count(ev2, waitlisted) # "0" for all -- DROP
+count(ev2, starts_on) # mm/dd/yyyy
+count(ev2, ends_on) # mm/dd/yyyy
+count(ev2, status) # ACTIVE or INACTIVE -- KEEP
 skim(ev2)
 
 ev3 <- ev2 |>
-  select(-c(...11, event_waitlisted)) |>
+  select(-c(waitlisted)) |>
   mutate(
-    event_attendees = as.integer(event_attendees),
-    event_start_date = lubridate::mdy(event_start_date),
-    event_end_date = lubridate::mdy(event_end_date)
+    attendees = as.integer(attendees),
+    starts_on = lubridate::mdy(starts_on),
+    ends_on = lubridate::mdy(ends_on)
   )
 glimpse(ev3)
 skim(ev3)
-ev3 |> filter(event_attendees == 406)
-count(ev3, event_category) # 43 categories; NA has 15 records
+ev3 |> filter(attendees == 406)
+count(ev3, category) # 43 categories; NA has 15 records
 
 saveRDS(ev3, fs::path(rds, "events_no_majorcat.rds"))
 

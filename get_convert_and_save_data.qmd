@@ -370,10 +370,10 @@ glimpse(don2)
 count(don2, fname, account_type)
 
 don3 <- don2 |>
-  select(-c(starts_with("..."), fname)) |>
+  select(-c(fname)) |>
   mutate(
     donation_date = mdy(donation_date),
-    donation = parse_number(donation),
+    donation_amount = parse_number(donation_amount),
     deceased = deceased == "Yes",
     do_not_contact = do_not_contact == "Yes"
   )
@@ -381,12 +381,12 @@ don3 <- don2 |>
 
 glimpse(don3)
 skim(don3)
-check <- don3 |> filter(is.na(donation)) # payment_status is DEFERRED
+check <- don3 |> filter(is.na(donation_amount)) # payment_status is DEFERRED
 count(check, payment_status)
 count(don3, payment_status)
 count(don3, donation_status)
 
-saveRDS(don3, fs::path(rds, "donations_no_hhid.rds"))
+saveRDS(don3, fs::path(rds, "donations_no_household_id.rds"))
 
 ```
 
@@ -409,15 +409,15 @@ ns(linkages)
 
 donations <- donations_no_household_id |>
   left_join(
-    linkages |> select(hh_name, household_id, accountid),
-    by = join_by(hh_name, accountid)
+    linkages |> select(household_name, household_id, account_id),
+    by = join_by(household_name, account_id)
   ) |>
   mutate(
-    id = ifelse(is.na(household_id), accountid, household_id),
-    name = ifelse(is.na(hh_name), full_name, hh_name),
+    id = ifelse(is.na(household_id), account_id, household_id),
+    name = ifelse(is.na(household_name), full_name, household_name),
     group = case_when(
       !is.na(household_id) ~ "household",
-      !is.na(accountid) ~ "account",
+      !is.na(account_id) ~ "account",
       .default = "other"
     )
   ) |>
@@ -426,8 +426,8 @@ donations <- donations_no_household_id |>
     name,
     group,
     household_id,
-    hh_name,
-    accountid,
+    household_name,
+    account_id,
     full_name,
     everything()
   )

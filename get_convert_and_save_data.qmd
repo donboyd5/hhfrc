@@ -183,6 +183,7 @@ lookup
 From Neon: "Household Report - Don's Household contact information report"
 
 ```{r}
+#| label: household-contact-information
 
 contactfname <- "household_contact_info_from_report_2025-07-22.csv"
 contactpath <- fs::path(neon, contactfname)
@@ -198,8 +199,8 @@ glimpse(contacts1)
 # nrows <- acct1 |> distinct() |> nrow()
 
 contacts2 <- contacts1 |>
-  rename(any_of(lookup)) |>
-  select(-starts_with("..."))
+  select(-starts_with("...")) |>
+  rename(any_of(lookup))
 ns(contacts2)
 skim(contacts2)
 
@@ -251,6 +252,7 @@ glimpse(acct1)
 # nrows <- acct1 |> distinct() |> nrow()
 
 acct2 <- acct1 |>
+  select(-starts_with("...")) |>
   rename(any_of(lookup))
 
 glimpse(acct2)
@@ -362,6 +364,7 @@ glimpse(don1)
 nrows <- don1 |> distinct() |> nrow()
 
 don2 <- don1 |>
+  select(-starts_with("...")) |>
   rename(any_of(lookup))
 ns(don2)
 glimpse(don2)
@@ -459,6 +462,7 @@ glimpse(ev1)
 ns(ev1)
 
 ev2 <- ev1 |>
+  select(-starts_with("...")) |>
   rename(any_of(lookup)) |>
   rename(
     event_status = status,
@@ -643,6 +647,7 @@ tmp <- regs1 |>
 # KEEP DUPLICATES FOR NOW
 
 regs2 <- regs1 |>
+  select(-starts_with("...")) |>
   rename(any_of(lookup)) |>
   rename(
     event_status = status,

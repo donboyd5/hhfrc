@@ -733,7 +733,7 @@ saveRDS(regs3, fs::path(rds, "registrations_no_eventid.rds"))
 ```
 
 
-## Put eventid, event_code, event_majorcat, ..., household_id, and hh_name on registrations file
+## Put eventid, event_code, event_majorcat, ..., household_id, and household_name on registrations file
 
 ```{r}
 #| label: add-eventid-to-registrations

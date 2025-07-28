@@ -700,28 +700,25 @@ tmp <- regs1 |>
 
 regs2 <- regs1 |>
   select(-starts_with("...")) |>
-  rename(any_of(lookup)) |>
-  rename(
-    event_status = status,
-    event_start_date = start_date
-  )
-names(regs2)
+  rename(any_of(lookup))
+ns(regs2)
 glimpse(regs2)
 skimr::skim(regs2)
 
 regs3 <- regs2 |>
-  select(-...17) |>
   mutate(
-    across(contains("date"), \(x) lubridate::mdy(x)),
+    across(c(created_date, last_modified_date, registered_on, starts_on), \(x) {
+      lubridate::mdy(x)
+    }),
     amount = parse_number(amount)
   )
 
 skimr::skim(regs3)
 glimpse(regs3)
 
-count(regs3, event_name, sort = TRUE) # 1.9k events none missing!
+count(regs3, event, sort = TRUE) # 1.9k events none missing!
 count(regs3, notes) # ~ 41 notes, rest are NA
-count(regs3, payment_method) # 137 varieties
+count(regs3, payment) # 137 varieties
 count(regs3, type)
 # 1 Attendee              27953
 # 2 Registrant             7154
@@ -729,7 +726,7 @@ count(regs3, type)
 count(regs3, campaign) # 33 campaigns noted; 37k recs are NA
 count(regs3, type)
 
-events <- count(regs3, event_name, sort = TRUE) # 1.9k events none missing!
+events <- count(regs3, event, sort = TRUE) # 1.9k events none missing!
 
 saveRDS(regs3, fs::path(rds, "registrations_no_eventid.rds"))
 
@@ -739,7 +736,7 @@ saveRDS(regs3, fs::path(rds, "registrations_no_eventid.rds"))
 ## Put eventid, event_code, event_majorcat, ..., household_id, and hh_name on registrations file
 
 ```{r}
-#| label: eventid-on-registrations
+#| label: add-eventid-to-registrations
 
 events <- readRDS(fs::path(rds, "events.rds"))
 linkages <- readRDS(fs::path(rds, "linkages.rds"))
@@ -747,31 +744,37 @@ regsnoid <- readRDS(fs::path(rds, "registrations_no_eventid.rds"))
 
 ns(events)
 ns(regsnoid)
+ns(linkages)
 
 regsid <- regsnoid |>
   left_join(
     events |>
       select(
-        eventid,
-        event_name,
-        event_start_date,
-        event_code,
+        event_id,
+        event = event_name,
+        starts_on,
+        code,
         event_majorcat,
-        event_category
+        category
       ), # event_code is a unique identifier
-    by = join_by(event_name, event_start_date)
+    by = join_by(event, starts_on)
   ) |> # including event_start_date in join is crucial and needed to ensure unique matches
   left_join(
     linkages |>
-      select(accountid, account_name = full_name, household_id, hh_name),
-    by = join_by(accountid, account_name)
+      select(
+        account_id,
+        account_name = full_name,
+        household_id,
+        household_name
+      ),
+    by = join_by(account_id, account_name)
   ) |>
   mutate(
-    id = ifelse(is.na(household_id), accountid, household_id),
-    name = ifelse(is.na(hh_name), account_name, hh_name),
+    id = ifelse(is.na(household_id), account_id, household_id),
+    name = ifelse(is.na(household_name), account_name, household_name),
     group = case_when(
       !is.na(household_id) ~ "household",
-      !is.na(accountid) ~ "account",
+      !is.na(account_id) ~ "account",
       .default = "other"
     )
   ) |>
@@ -780,14 +783,14 @@ regsid <- regsnoid |>
     name,
     group,
     household_id,
-    hh_name,
-    accountid,
+    household_name,
+    account_id,
     account_name,
-    eventid,
-    event_code,
-    event_name,
+    event_id,
+    code,
+    event,
     event_majorcat,
-    event_category,
+    category,
     everything()
   )
 skim(regsid)
@@ -795,7 +798,7 @@ count(regsid, type)
 count(regsid, event_majorcat)
 check <- regsid |> filter(is.na(event_majorcat))
 sum(check$amount) # $32,531 of events that aren't in the events file
-unique(check$event_name) # the missing ones all have 2025 registraions after the data import!
+unique(check$event) # the missing ones all have 2025 registraions after the data import!
 count(regsid, type)
 
 saveRDS(regsid, fs::path(rds, "registrations.rds"))

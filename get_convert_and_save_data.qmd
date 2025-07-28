@@ -496,111 +496,152 @@ saveRDS(ev3, fs::path(rds, "events_no_majorcat.rds"))
 #| label: events-majorcat
 
 evcat1 <- readRDS(fs::path(rds, "events_no_majorcat.rds"))
-count(evcat1, event_category)
+count(evcat1, category)
+ns(evcat1)
 
 # major category: performance, classes, ?
 # minor category: music_mfs, music_other
 
+library(dplyr)
+library(stringr)
+
+# ---- Define pattern/category lists at the top ----
+
+performance_names <- c(
+  "2nd Annual Hubbard Hall-oween Celebration (2016)",
+  "An Unforgettable Crooner Cabaret",
+  "Hubbard Hall-oween Celebration",
+  "Hubbard Hall-O-Ween Monster Mash Ball; 7pm",
+  "Hubbard Halloween Ball - Saturday, October 26th, 2019 at 6pm",
+  "Miscast Cabaret -- Fundraiser",
+  "Music From Salem Listening Club: Music About Nature",
+  "Night of Duets Cabaret -- Fundraiser",
+  "Songs for Scholarships Cabaret - Saturday July 28th at 7pm",
+  "Special Event: A Day at the Opera, August 15",
+  "TriBeCaStan: In Concert!",
+  "Whispering Bones"
+)
+performance_patterns <- c("Brews & Blues", "A Christmas Carol")
+
+performance_cats <- c(
+  "Music Performances",
+  "Music from Salem Performances",
+  "Opera Performances",
+  "Shakespeare"
+)
+
+# "Exceptions to the performance categories that should be classes"
+class_exceptions_performance <- c("Dance Mob")
+class_exceptions_dance <- c(
+  "Dance Ceili",
+  "Dance Mob",
+  "Dance Showcase",
+  "Irish Ceili",
+  "Russian Tea",
+  "Young Dancer"
+)
+class_exceptions_theater <- c(
+  "Drama Club",
+  "Teen Theater",
+  "Teen Theatre",
+  "Youth Chorale",
+  "Youth Theater",
+  "Youth Theatre"
+)
+
+class_cats <- c(
+  "Classes",
+  "Ballet",
+  "Bollywood & BollyX",
+  "Dance Workshops",
+  "Foil Fencing",
+  "Hip Hop",
+  "Irish Step Dance",
+  "Pilates/Yoga",
+  "Puppetry",
+  "Tap Dance",
+  "Visual Arts",
+  "Visual Arts - Crafts",
+  "Wellness",
+  "Workshops"
+)
+
+community_cats <- c(
+  "Community Events",
+  "Curiosity Forum",
+  "Dinners",
+  "Exhibits, Films & Lectures",
+  "Film Screenings",
+  "Home & Garden",
+  "Literary"
+)
+community_patterns <- c("Community", "Garden Tour", "Holiday Breakfast")
+
+other_cats <- c("Auditions", "Fundraising Events", "Special Events")
+
+# ---- Helper: collapse patterns for str_detect ----
+pattern_collapse <- function(x) paste(x, collapse = "|")
+
+# ---- The transparent, readable, maintainable pipeline ----
+
 evcat2 <- evcat1 |>
   mutate(
     event_majorcat = case_when(
-      str_detect(event_category, "Performances") ~ "performance",
-      event_category %in% c("Shakespeare") ~ "performance",
-      event_name %in%
-        c(
-          "2nd Annual Hubbard Hall-oween Celebration (2016)",
-          "An Unforgettable Crooner Cabaret",
-          "Hubbard Hall-oween Celebration",
-          "Hubbard Hall-O-Ween Monster Mash Ball; 7pm",
-          "Hubbard Halloween Ball - Saturday, October 26th, 2019 at 6pm",
-          "Miscast Cabaret -- Fundraiser",
-          "Music From Salem Listening Club: Music About Nature",
-          "Night of Duets Cabaret -- Fundraiser",
-          "Songs for Scholarships Cabaret - Saturday July 28th at 7pm",
-          "Special Event: A Day at the Opera, August 15",
-          "TriBeCaStan: In Concert!",
-          "Whispering Bones"
+      ## ------ PERFORMANCE ------
+      event_name %in% performance_names ~ "performance",
+      str_detect(event_name, pattern_collapse(performance_patterns)) ~
+        "performance",
+      # Performance categories minus exceptions:
+      category == "Performances" &
+        !str_detect(
+          event_name,
+          pattern_collapse(class_exceptions_performance)
         ) ~
         "performance",
-      str_detect(event_name, "Blues") & str_detect(event_name, "Brews") ~
-        "performance", # some oddball text
-      str_detect(event_name, "Christmas Carol") &
-        str_detect(event_name, "Performance") ~
+      category == "Dance Performances" &
+        !str_detect(event_name, pattern_collapse(class_exceptions_dance)) ~
         "performance",
+      category == "Theater Performances" &
+        !str_detect(event_name, pattern_collapse(class_exceptions_theater)) ~
+        "performance",
+      category %in% performance_cats ~ "performance",
 
-      event_category %in%
-        c(
-          "Classes",
-          "Ballet",
-          "Bollywood & BollyX",
-          "Dance Workshops",
-          "Foil Fencing",
-          "Hip Hop",
-          "Irish Step Dance",
-          "Pilates/Yoga",
-          "Puppetry",
-          "Tap Dance",
-          "Visual Arts",
-          "Visual Arts - Crafts",
-          "Wellness",
-          "Workshops"
-        ) ~
+      ## ------ CLASSES ------
+      # Class exceptions inside performance categories:
+      category == "Performances" &
+        str_detect(event_name, pattern_collapse(class_exceptions_performance)) ~
         "class",
-      # event_category == "Children's Theater" &
-      #   str_detect(event_name, "Performance") &
-      #   !str_detect(event_name, "Performance Explorers") ~
-      #   "class",
-      # event_category == "Children's Theater" &
-      #   str_detect(event_name, "Showcase") ~
-      #   "class",
-      # event_category == "Children's Theater" &
-      #   str_detect(event_name, "SOLD OUT") ~
-      #   "class",
-      str_detect(event_category, "Classes") ~ "class", # Only needed if catching partial matches
-      event_category == "Children's Theater" ~ "class",
-      event_category == "Chorale" ~ "class", # CAUTION: some might be performances
-      str_detect(event_category, "Martial Arts") ~ "class",
-      str_detect(event_category, "Workshops") ~ "class",
-      event_name %in%
-        c(
-          "Chair Yoga (Ages 16 & up) Fridays, Feb. 9 - May 10 -  12:15pm - 1pm"
-        ) ~
+      category == "Dance Performances" &
+        str_detect(event_name, pattern_collapse(class_exceptions_dance)) ~
         "class",
+      category == "Theater Performances" &
+        str_detect(event_name, pattern_collapse(class_exceptions_theater)) ~
+        "class",
+      # Categories and partials
+      category %in% class_cats ~ "class",
+      str_detect(category, "Classes|Martial Arts|Workshops") ~ "class",
+      category == "Children's Theater" ~ "class",
+      category == "Chorale" ~ "class", # review later if needed
 
-      event_category %in%
-        c(
-          "Community Events",
-          "Curiosity Forum",
-          "Dinners",
-          "Exhibits, Films & Lectures",
-          "Film Screenings",
-          "Home & Garden",
-          "Literary"
-        ) ~
+      ## ------ COMMUNITY ------
+      category %in% community_cats ~ "community",
+      str_detect(event_name, pattern_collapse(community_patterns)) ~
         "community",
-      str_detect(event_name, "Community") ~ "community",
-      str_detect(event_name, "Garden Tour") ~ "community",
-      str_detect(event_name, "Holiday Breakfast") ~ "community",
 
-      # note that this should come last and only pick up items not captured above
-      event_category %in%
-        c("Auditions", "Fundraising Events", "Special Events", NA_character_) ~
-        "other",
+      ## ------ OTHER ------
+      category %in% other_cats | is.na(category) ~ "other",
       str_detect(event_name, "Gala") ~ "other",
+
+      ## ------ CATCH-ALL ------
       .default = "ERROR"
     )
-  )
+  ) |>
+  select(event_majorcat, category, event_name, code, event_id, everything()) |>
+  arrange(event_majorcat, category, event_name, starts_on)
 
 count(evcat2, event_majorcat)
-tmp <- count(evcat2, event_majorcat, event_category, event_name)
+tmp <- count(evcat2, event_majorcat, category, event_name)
 
-# mutate(event_majorcat = case_when(
-#   str_detect(event_category, "Music from Salem Performances") ~ "mfs",
-#   str_detect(event_category, )
-#   .default = "other"
-# )
-
-count(evcat2, event_majorcat)
 saveRDS(evcat2, fs::path(rds, "events.rds"))
 
 ```

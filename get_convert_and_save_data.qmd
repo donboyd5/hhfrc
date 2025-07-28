@@ -502,9 +502,6 @@ ns(evcat1)
 # major category: performance, classes, ?
 # minor category: music_mfs, music_other
 
-library(dplyr)
-library(stringr)
-
 # ---- Define pattern/category lists at the top ----
 
 performance_names <- c(
@@ -521,7 +518,11 @@ performance_names <- c(
   "TriBeCaStan: In Concert!",
   "Whispering Bones"
 )
-performance_patterns <- c("Brews & Blues", "A Christmas Carol")
+performance_patterns <- c(
+  "Brews & Blues",
+  "Blues & Brews",
+  "A Christmas Carol"
+)
 
 performance_cats <- c(
   "Music Performances",
@@ -579,18 +580,25 @@ community_patterns <- c("Community", "Garden Tour", "Holiday Breakfast")
 
 other_cats <- c("Auditions", "Fundraising Events", "Special Events")
 
+# Patterns for NA category but class-like event names
+class_patterns_na <- c("Drama Club", "Yoga")
+
 # ---- Helper: collapse patterns for str_detect ----
 pattern_collapse <- function(x) paste(x, collapse = "|")
 
-# ---- The transparent, readable, maintainable pipeline ----
+matches_any_fixed <- function(strings, patterns) {
+  vapply(strings, function(s) any(str_detect(s, fixed(patterns))), logical(1))
+}
+
+
+# ---- Main pipeline ----
 
 evcat2 <- evcat1 |>
   mutate(
     event_majorcat = case_when(
       ## ------ PERFORMANCE ------
       event_name %in% performance_names ~ "performance",
-      str_detect(event_name, pattern_collapse(performance_patterns)) ~
-        "performance",
+      matches_any_fixed(event_name, performance_patterns) ~ "performance",
       # Performance categories minus exceptions:
       category == "Performances" &
         !str_detect(
@@ -623,6 +631,15 @@ evcat2 <- evcat1 |>
       category == "Children's Theater" ~ "class",
       category == "Chorale" ~ "class", # review later if needed
 
+      # Classes - NA category but matching key patterns
+      (is.na(category) &
+        str_detect(event_name, pattern_collapse(class_patterns_na))) ~
+        "class",
+      (is.na(category) &
+        str_detect(event_name, "Teen") &
+        str_detect(event_name, "Showcase")) ~
+        "class",
+
       ## ------ COMMUNITY ------
       category %in% community_cats ~ "community",
       str_detect(event_name, pattern_collapse(community_patterns)) ~
@@ -633,7 +650,7 @@ evcat2 <- evcat1 |>
       str_detect(event_name, "Gala") ~ "other",
 
       ## ------ CATCH-ALL ------
-      .default = "ERROR"
+      TRUE ~ "ERROR"
     )
   ) |>
   select(event_majorcat, category, event_name, code, event_id, everything()) |>

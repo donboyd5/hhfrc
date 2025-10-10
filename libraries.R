@@ -11,7 +11,7 @@ library(quarto)
 library(fs)
 library(vroom)
 library(readxl)
-library(openxlsx) # for writing xlsx files
+library(openxlsx2) # for writing xlsx files
 library(lubridate)
 # library(RcppRoll) library(fredr) library(tidycensus)
 library(zoo)

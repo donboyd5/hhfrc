@@ -143,7 +143,7 @@ vnames
 updated_lookup <- bind_rows(vnames, newvars) |>
   arrange(neon, vname)
 
-saveRDS(updated_lookup, fs::path(work, "prelim_variable_lookup.rds"))
+# saveRDS(updated_lookup, fs::path(work, "prelim_variable_lookup.rds"))
 
 # writexl::write_xlsx(
 #   vnames,
@@ -254,10 +254,11 @@ glimpse(acct1)
 acct2 <- acct1 |>
   select(-starts_with("...")) |>
   rename(any_of(lookup))
+ns(acct2)
 
 glimpse(acct2)
 skim(acct2) # drop ...24, activity_contactid, activityid, gender
-count(acct2, importid) # drop its only values are 10 and 4 with most missing
+count(acct2, import_id) # drop its only values are 10 and 4 with most missing
 count(acct2, do_not_contact)
 count(acct2, deceased)
 ns(acct2)
@@ -818,18 +819,22 @@ saveRDS(regsid, fs::path(rds, "registrations.rds"))
 
 check <- readRDS(fs::path(rds, "registrations_no_eventid.rds"))
 skim(check)
+ns(check)
+glimpse(check)
 
 # amounts by calendar year
 check |>
-  mutate(year = year(event_start_date)) |>
+  # mutate(year = year(event_start_date)) |>
+  mutate(year = year(starts_on)) |> # djb
   summarise(n = n(), amount = sum(amount), .by = year) |>
   janitor::adorn_totals()
 
 check |>
-  filter(!is.na(accountid)) |>
-  arrange(desc(last_mod_date)) |>
+  filter(!is.na(account_id)) |>
+  arrange(desc(last_modified_date)) |> # djb
   filter(row_number() <= 24672) |>
-  mutate(year = year(event_start_date)) |>
+  # mutate(year = year(event_start_date)) |>
+  mutate(year = year(starts_on)) |>
   arrange(year) |>
   summarise(n = n(), amount = sum(amount), .by = year) |>
   janitor::adorn_totals()
@@ -842,7 +847,7 @@ check |>
   mutate(pct = amount / sum(amount))
 
 check |>
-  mutate(accountid_missing = is.na(accountid)) |>
+  mutate(accountid_missing = is.na(account_id)) |>
   summarise(n = n(), amount = sum(amount), .by = accountid_missing) |>
   mutate(pctamount = amount / sum(amount))
 
@@ -851,14 +856,14 @@ check |>
   # arrange(desc(event_start_date)) |>
   arrange(desc(created_date)) |>
   filter(row_number() <= 24672) |>
-  mutate(has_accountid = !is.na(accountid)) |>
+  mutate(has_accountid = !is.na(account_id)) |>
   summarise(n = n(), amount = sum(amount), .by = has_accountid) |>
   janitor::adorn_totals()
 
 check |>
-  arrange(desc(last_mod_date)) |>
+  arrange(desc(last_modified_date)) |>
   filter(row_number() <= 24672) |>
-  mutate(has_accountid = !is.na(accountid)) |>
+  mutate(has_accountid = !is.na(account_id)) |>
   summarise(n = n(), amount = sum(amount), .by = has_accountid) |>
   janitor::adorn_totals() |>
   mutate(
@@ -867,8 +872,8 @@ check |>
   )
 
 check |>
-  arrange(desc(last_mod_date)) |>
-  mutate(has_accountid = !is.na(accountid)) |>
+  arrange(desc(last_modified_date)) |>
+  mutate(has_accountid = !is.na(account_id)) |>
   summarise(n = n(), amount = sum(amount), .by = has_accountid) |>
   janitor::adorn_totals() |>
   mutate(
@@ -877,7 +882,7 @@ check |>
   )
 
 check |>
-  filter(!is.na(accountid)) |>
+  filter(!is.na(account_id)) |>
   arrange(desc(created_date)) |>
   filter(row_number() <= 24672) |>
   summarise(n = n(), amount = sum(amount))

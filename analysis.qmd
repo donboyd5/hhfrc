@@ -290,14 +290,14 @@ regorder <- c("performance", "class", "community", "other")
 events_data <- events |>
   select(
     event_majorcat,
-    event_category,
+    event_category = category,
     event_name,
-    event_start_date,
-    eventid,
-    event_code
+    event_start_date = starts_on,
+    event_id,
+    event_code = code
   ) |>
   mutate(event_majorcat = factor(event_majorcat, levels = regorder)) |>
-  arrange(event_majorcat, event_category, eventid, event_name)
+  arrange(event_majorcat, event_category, event_id, event_name)
 
 range_write(
   ss,

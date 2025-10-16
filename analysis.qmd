@@ -133,20 +133,22 @@ don1 <- donations |>
 ns(don1)
 skim(don1) # no missing donations
 
-idvars <- c("id", "name", "group", "household_id", "hh_name", "accountid")
+idvars <- c("id", "name", "group", "household_id", "hh_name", "account_id")
+
+count(don1, campaign_id, campaign_name)
 
 hhalldon <- don1 |>
   group_by(id, name) |>
   mutate(
-    donation_all = sum(donation),
-    donation_last5years = sum(donation[hhfy %in% 2021:2025]),
-    donation_max = max(donation),
-    n_max_donation = sum(donation == donation_max, na.rm = TRUE),
-    date_of_max = donation_date[donation == donation_max][1],
-    campaign_of_max = campaign[donation == donation_max][1],
+    donation_all = sum(donation_amount),
+    donation_last5years = sum(donation_amount[hhfy %in% 2021:2025]),
+    donation_max = max(donation_amount),
+    n_max_donation = sum(donation_amount == donation_max, na.rm = TRUE),
+    date_of_max = donation_date[donation_amount == donation_max][1],
+    campaign_of_max = campaign_name[donation_amount == donation_max][1],
     last_donation_date = max(donation_date),
     fy_of_last_donation = hhfy[donation_date == last_donation_date][1],
-    total_donation_latest_donation_fy = sum(donation[
+    total_donation_latest_donation_fy = sum(donation_amount[
       hhfy == fy_of_last_donation
     ])
   ) |>
@@ -175,10 +177,17 @@ hhalldon <- don1 |>
 hhall_enhanced <- hhalldon |>
   left_join(acctlink |> select(-c(group)), by = join_by(id, name)) |>
   left_join(
-    contacts |> select(id, name, pfname, plname, address1:pphone),
+    contacts |>
+      select(
+        id,
+        name,
+        primary_contact_first_name,
+        primary_contact_last_name,
+        address_line1:primary_contact_phone
+      ),
     by = join_by(id, name)
   ) |>
-  filter(!deceased, accountid != "36805") |>
+  filter(!deceased, account_id != "36805") |>
   select(-deceased)
 
 ns(hhall_enhanced)
@@ -195,7 +204,7 @@ ns(hhall_enhanced)
 # get hh by fiscal year
 don1_2021plus <- don1 |>
   filter(account_type == "Individual") |>
-  mutate(donation_all = sum(donation), .by = c(id, name)) |>
+  mutate(donation_all = sum(donation_amount), .by = c(id, name)) |>
   filter(donation_date >= "2020-07-01") |>
   filter(
     donation_type %in% c("DONATION", "PLEDGEPAYMENT"),
@@ -213,19 +222,19 @@ don1_2021plus <- don1 |>
 ns(don1_2021plus)
 skim(don1_2021plus) # no missing donations
 
-idvars <- c("id", "name", "group", "household_id", "hh_name", "accountid")
+idvars <- c("id", "name", "group", "household_id", "hh_name", "account_id")
 
 hhalldon_2021plus <- don1_2021plus |>
   group_by(id, name) |>
   mutate(
-    donation_last5years = sum(donation[hhfy %in% 2021:2025]),
-    donation_max = max(donation),
-    n_max_donation = sum(donation == donation_max, na.rm = TRUE),
-    date_of_max = donation_date[donation == donation_max][1],
-    campaign_of_max = campaign[donation == donation_max][1],
+    donation_last5years = sum(donation_amount[hhfy %in% 2021:2025]),
+    donation_max = max(donation_amount),
+    n_max_donation = sum(donation_amount == donation_max, na.rm = TRUE),
+    date_of_max = donation_date[donation_amount == donation_max][1],
+    campaign_of_max = campaign_name[donation_amount == donation_max][1],
     last_donation_date = max(donation_date),
     fy_of_last_donation = hhfy[donation_date == last_donation_date][1],
-    total_donation_latest_donation_fy = sum(donation[
+    total_donation_latest_donation_fy = sum(donation_amount[
       hhfy == fy_of_last_donation
     ])
   ) |>
@@ -254,10 +263,17 @@ hhalldon_2021plus <- don1_2021plus |>
 hhall_enhanced_2021plus <- hhalldon_2021plus |>
   left_join(acctlink |> select(-c(group)), by = join_by(id, name)) |>
   left_join(
-    contacts |> select(id, name, pfname, plname, address1:pphone),
+    contacts |>
+      select(
+        id,
+        name,
+        primary_contact_first_name,
+        primary_contact_last_name,
+        address_line1:primary_contact_phone
+      ),
     by = join_by(id, name)
   ) |>
-  filter(!deceased, accountid != "36805") |>
+  filter(!deceased, account_id != "36805") |>
   select(-deceased)
 
 ns(hhall_enhanced_2021plus)

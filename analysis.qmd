@@ -392,8 +392,13 @@ donor_events <- hhall_enhanced |>
 #| label: do-not-contact
 
 glimpse(hhall_enhanced)
+ns(hhall_enhanced)
 
-dnc <- hhall_enhanced |>
+# temporary name fix create hhall_enhanced2 ----
+hhall_enhanced2 <- hhall_enhanced |>
+  rename(hh_name = name)
+
+dnc <- hhall_enhanced2 |>
   filter(do_not_contact, donation_all >= 1000) |>
   mutate(explanation = "") |>
   relocate(explanation, .after = hh_name)

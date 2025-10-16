@@ -429,15 +429,15 @@ top100 <- hhall_enhanced |>
 
 # sheet_add(ss, sheet = "top100_all_time")
 
-range_write(
-  ss,
-  top100,
-  sheet = "top100_all_time",
-  range = "A10",
-  col_names = TRUE,
-  reformat = FALSE
-)
-
+# djb further comment out google sheets to avoid accidental overwrite ----
+# range_write(
+#   ss,
+#   top100,
+#   sheet = "top100_all_time",
+#   range = "A10",
+#   col_names = TRUE,
+#   reformat = FALSE
+# )
 
 ```
 

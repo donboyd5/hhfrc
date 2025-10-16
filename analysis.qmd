@@ -368,10 +368,10 @@ gs4_auth() # always
 # gswb <- gs4_create("donors") # ONETIME
 # sheet_write(donfinal, gswb, sheet = "all_donors") # writing a full sheet
 
-ssid <- "1xwNYOddcJSRmAvaR9DlT1Aixrs1WciwVYUvv3AzmdM0"
-donors_workbook <- "https://docs.google.com/spreadsheets/d/1xwNYOddcJSRmAvaR9DlT1Aixrs1WciwVYUvv3AzmdM0"
-(ss <- gs4_get(donors_workbook))
-ss
+# ssid <- "1xwNYOddcJSRmAvaR9DlT1Aixrs1WciwVYUvv3AzmdM0"
+# donors_workbook <- "https://docs.google.com/spreadsheets/d/1xwNYOddcJSRmAvaR9DlT1Aixrs1WciwVYUvv3AzmdM0"
+# (ss <- gs4_get(donors_workbook))
+# ss
 
 # sheet_add(ss, sheet = NULL, ..., .before = NULL, .after = NULL)
 

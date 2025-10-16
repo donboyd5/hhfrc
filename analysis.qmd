@@ -299,15 +299,16 @@ events_data <- events |>
   mutate(event_majorcat = factor(event_majorcat, levels = regorder)) |>
   arrange(event_majorcat, event_category, event_id, event_name)
 
-range_write(
-  ss,
-  events_data,
-  sheet = "event_categorizations",
-  range = "A13",
-  col_names = TRUE,
-  reformat = FALSE
-)
 
+# 10/16/2025 djb CAUTION: DO NOT RUN THIS UNTIL I FIGURE OUT WHAT IT IS DOING AS IT WOULD OVERWRITE GOOGLE SHEET
+# range_write(
+#   ss,
+#   events_data,
+#   sheet = "event_categorizations",
+#   range = "A13",
+#   col_names = TRUE,
+#   reformat = FALSE
+# )
 
 ```
 

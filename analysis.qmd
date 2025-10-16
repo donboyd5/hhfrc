@@ -192,6 +192,8 @@ hhall_enhanced <- hhalldon |>
 
 ns(hhall_enhanced)
 
+saveRDS(hhall_enhanced, fs::path(rds, "hhall_enhanced.rds")) # djb
+
 ```
 
 

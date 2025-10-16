@@ -1,0 +1,452 @@
+
+
+## Setup
+
+```{r}
+#| label: setup
+
+source(here::here("libraries.R"))
+
+hhdr <- here::here("data-raw")
+neon <- fs::path(hhdr, "neon")
+judy <- fs::path(hhdr, "judy")
+rds <- fs::path(hhdr, "rds")
+work <- fs::path(hhdr, "work")
+
+```
+
+## Retrieve prepared data
+
+```{r}
+#| label: get-data
+
+linkages <- readRDS(fs::path(rds, "linkages.rds"))
+accounts <- readRDS(fs::path(rds, "accounts.rds"))
+contacts <- readRDS(fs::path(rds, "contacts.rds"))
+donations <- readRDS(fs::path(rds, "donations.rds"))
+events <- readRDS(fs::path(rds, "events.rds"))
+evcat1 <- readRDS(fs::path(rds, "events_no_majorcat.rds"))
+registrations <- readRDS(fs::path(rds, "registrations.rds"))
+hhall_enhanced <- readRDS(fs::path(rds, "hhall_enhanced.rds"))
+
+xljudy <- read_excel(
+  fs::path(judy, "HH Donor List - All Donations $15+.xlsx"),
+  sheet = "List by Total Donations"
+)
+
+```
+
+## Construct minor category for events
+
+```{r}
+# 25th Annual Putnam County Spelling Bee - Nov 28 at 8pm
+regorder <- c("performance", "class", "community", "other")
+
+count(events, status)
+count(events, )
+
+events_data_erin <- events |>
+  select(
+    event_majorcat,
+    event_category = category,
+    event_name,
+    event_start_date = starts_on,
+    event_id,
+    event_code = code
+  ) |>
+  mutate(event_majorcat = factor(event_majorcat, levels = regorder)) |>
+  mutate(
+    event_minorcat = case_when(
+      event_majorcat == "performance" &
+        str_detect(event_category, coll("Dance", ignore_case = TRUE)) ~
+        "dance",
+      event_majorcat == "performance" &
+        str_detect(event_name, coll("Dance", ignore_case = TRUE)) ~
+        "dance",
+
+      event_majorcat == "performance" &
+        str_detect(event_category, coll("Music", ignore_case = TRUE)) ~
+        "music",
+      event_majorcat == "performance" &
+        str_detect(event_name, coll("Music from Salem", ignore_case = TRUE)) ~
+        "music",
+      event_majorcat == "performance" &
+        str_detect(event_name, coll("Bob Warren", ignore_case = TRUE)) ~
+        "music",
+      event_majorcat == "performance" &
+        str_detect(event_name, coll("Music", ignore_case = TRUE)) ~
+        "music",
+      event_majorcat == "performance" &
+        str_detect(event_name, "Cabaret") ~
+        "music",
+      event_majorcat == "performance" &
+        str_detect(event_name, "Concert") ~
+        "music",
+      event_majorcat == "performance" &
+        str_detect(event_name, fixed("Blues")) ~
+        "music",
+      event_majorcat == "performance" &
+        str_detect(
+          event_name,
+          coll("Red Guitar", ignore_case = TRUE)
+        ) ~
+        "music",
+      event_majorcat == "performance" &
+        str_detect(
+          event_name,
+          coll("Florian Kitt", ignore_case = TRUE)
+        ) ~
+        "music",
+      event_majorcat == "performance" &
+        str_detect(
+          event_name,
+          coll("Jean Redpath", ignore_case = TRUE)
+        ) ~
+        "music",
+      event_majorcat == "performance" &
+        str_detect(
+          event_name,
+          coll("Village Harmony", ignore_case = TRUE)
+        ) ~
+        "music",
+
+      event_majorcat == "performance" &
+        event_category %in% c("Shakespeare", "Theater Performances") ~
+        "theater",
+      event_majorcat == "performance" &
+        str_detect(event_name, "Putnam County Spelling Bee") ~
+        "theater",
+      event_majorcat == "performance" &
+        str_detect(
+          event_name,
+          coll("Year of Magical Thinking", ignore_case = TRUE)
+        ) ~
+        "theater",
+      event_majorcat == "performance" &
+        str_detect(
+          event_name,
+          coll("Really Rosie", ignore_case = TRUE) # youth theater
+        ) ~
+        "theater",
+      event_majorcat == "performance" &
+        str_detect(
+          event_name,
+          coll("Sabina Spielrein", ignore_case = TRUE) # youth theater
+        ) ~
+        "theater",
+      event_majorcat == "performance" &
+        str_detect(event_name, "Crucible") ~
+        "theater",
+      event_majorcat == "performance" &
+        str_detect(event_name, "Winter Carnival of New Work") ~
+        "theater",
+      event_majorcat == "performance" &
+        str_detect(event_name, "Shakespeare") ~
+        "theater",
+      event_majorcat == "performance" &
+        str_detect(event_name, "Travels With a Masked Man") ~
+        "theater",
+      event_majorcat == "performance" &
+        str_detect(event_name, "Theater") ~
+        "theater",
+
+      event_majorcat == "performance" &
+        event_category == "Opera Performances" ~
+        "opera",
+      event_majorcat == "performance" &
+        str_detect(event_name, "Opera") ~
+        "opera",
+
+      .default = "other"
+    )
+  ) |>
+  arrange(event_majorcat, event_minorcat, event_category, event_id, event_name)
+
+count(events_data_erin, event_majorcat, event_minorcat, event_category)
+
+ns(events)
+tmp <- events_data_erin |>
+  filter(
+    event_majorcat == "performance",
+    event_minorcat == "other"
+  )
+
+
+```
+
+
+```{r}
+
+ns(registrations)
+ns(events_data_erin)
+
+registrations_erin <- registrations |>
+  rename(event_status = status, event_name = event) |>
+  left_join(
+    events_data_erin |>
+      select(event_id, event_name2 = event_name, event_minorcat),
+    by = join_by(event_id)
+  )
+count(registrations_erin, event_name, event_name2) |>
+  filter(event_name != event_name2)
+
+registrations_erin |>
+  select(event_majorcat, event_minorcat, event_id, event_name) |>
+  distinct() |>
+  count(event_majorcat, event_minorcat)
+
+reg1_erin <- registrations_erin |>
+  filter(!is.na(id)) |>
+  filter(
+    type %in% c("Registrant", "Registrant & Attendee"),
+    event_status == "SUCCEEDED"
+  ) |>
+  summarise(
+    amount = sum(amount),
+    .by = c(id, name, group, event_majorcat, event_minorcat)
+  )
+
+tmp <- reg1_erin |>
+  filter(!is.na(event_majorcat)) |>
+  filter(!is.na(event_minorcat)) |>
+  select(-group)
+anyDuplicated(tmp)
+anyDuplicated(tmp$id) # 10
+anyDuplicated(tmp$name)
+
+dups <- reg1_erin |>
+  filter(!is.na(event_majorcat)) |>
+  filter(!is.na(event_minorcat)) |>
+  select(-group) |>
+  arrange(id, name) |>
+  mutate(n = n(), .by = c(id, name)) |>
+  filter(n > 1)
+dups
+
+anyDuplicated(donor_events_erin)
+anyDuplicated(donor_events_erin$name)
+anyDuplicated(donor_events_erin$id)
+
+donor_events_erin <- hhall_enhanced |>
+  filter(!do_not_contact) |>
+  select(id, name, group, donation_all) |>
+  left_join(
+    reg1_erin |>
+      filter(!is.na(event_majorcat)) |>
+      filter(!is.na(event_minorcat)) |>
+      select(-group),
+    by = join_by(id, name)
+  ) |>
+  filter(!is.na(event_majorcat)) |>
+  mutate(event_majorcat = factor(event_majorcat, levels = regorder)) |>
+  summarise(
+    donation_all = first(donation_all),
+    amount = sum(amount, na.rm = TRUE),
+    .by = c(id, name, event_majorcat, event_minorcat)
+  ) |>
+  arrange(event_majorcat, event_minorcat) |>
+  pivot_wider(
+    names_from = c(event_majorcat, event_minorcat),
+    values_from = amount,
+    values_fill = 0
+  ) |>
+  mutate(event_sum = rowSums(across(performance_dance:other_other))) |>
+  relocate(event_sum, .after = donation_all) |>
+  arrange(desc(donation_all)) |>
+  filter(row_number() <= 100)
+
+```
+
+
+```{r}
+
+library(writexl)
+# library(xlsx)
+
+# events_data_erin |>
+#   writexl::write_xlsx(path = fs::path(rds, "event_categorizations.xlsx"))
+
+donor_events_erin |>
+  writexl::write_xlsx(path = fs::path(rds, "donations_and_events.xlsx"))
+
+```
+
+# CAUTION: STOP below here
+
+```{r}
+#| echo: false
+knitr::knit_exit()
+```
+
+
+
+```{r}
+#| label: events-majorcat
+
+count(evcat1, category)
+ns(evcat1)
+
+# major category: performance, classes, ?
+# minor category: music_mfs, music_other
+
+# ---- Define pattern/category lists at the top ----
+
+performance_names <- c(
+  "2nd Annual Hubbard Hall-oween Celebration (2016)",
+  "An Unforgettable Crooner Cabaret",
+  "Hubbard Hall-oween Celebration",
+  "Hubbard Hall-O-Ween Monster Mash Ball; 7pm",
+  "Hubbard Halloween Ball - Saturday, October 26th, 2019 at 6pm",
+  "Miscast Cabaret -- Fundraiser",
+  "Music From Salem Listening Club: Music About Nature",
+  "Night of Duets Cabaret -- Fundraiser",
+  "Songs for Scholarships Cabaret - Saturday July 28th at 7pm",
+  "Special Event: A Day at the Opera, August 15",
+  "TriBeCaStan: In Concert!",
+  "Whispering Bones"
+)
+
+performance_patterns <- c(
+  "Brews & Blues",
+  "Blues & Brews",
+  "A Christmas Carol"
+)
+
+performance_cats <- c(
+  "Music Performances",
+  "Music from Salem Performances",
+  "Opera Performances",
+  "Shakespeare"
+)
+
+# "Exceptions to the performance categories that should be classes"
+class_exceptions_performance <- c("Dance Mob")
+class_exceptions_dance <- c(
+  "Dance Ceili",
+  "Dance Mob",
+  "Dance Showcase",
+  "Irish Ceili",
+  "Russian Tea",
+  "Young Dancer"
+)
+class_exceptions_theater <- c(
+  "Drama Club",
+  "Teen Theater",
+  "Teen Theatre",
+  "Youth Chorale",
+  "Youth Theater",
+  "Youth Theatre"
+)
+
+class_cats <- c(
+  "Classes",
+  "Ballet",
+  "Bollywood & BollyX",
+  "Dance Workshops",
+  "Foil Fencing",
+  "Hip Hop",
+  "Irish Step Dance",
+  "Pilates/Yoga",
+  "Puppetry",
+  "Tap Dance",
+  "Visual Arts",
+  "Visual Arts - Crafts",
+  "Wellness",
+  "Workshops"
+)
+
+community_cats <- c(
+  "Community Events",
+  "Curiosity Forum",
+  "Dinners",
+  "Exhibits, Films & Lectures",
+  "Film Screenings",
+  "Home & Garden",
+  "Literary"
+)
+community_patterns <- c("Community", "Garden Tour", "Holiday Breakfast")
+
+other_cats <- c("Auditions", "Fundraising Events", "Special Events")
+
+# Patterns for NA category but class-like event names
+class_patterns_na <- c("Drama Club", "Yoga")
+
+# ---- Helper: collapse patterns for str_detect ----
+pattern_collapse <- function(x) paste(x, collapse = "|")
+
+matches_any_fixed <- function(strings, patterns) {
+  vapply(strings, function(s) any(str_detect(s, fixed(patterns))), logical(1))
+}
+
+
+# ---- Main pipeline ----
+
+evcat2 <- evcat1 |>
+  mutate(
+    event_majorcat = case_when(
+      ## ------ PERFORMANCE ------
+      event_name %in% performance_names ~ "performance",
+      matches_any_fixed(event_name, performance_patterns) ~ "performance",
+      # Performance categories minus exceptions:
+      category == "Performances" &
+        !str_detect(
+          event_name,
+          pattern_collapse(class_exceptions_performance)
+        ) ~
+        "performance",
+      category == "Dance Performances" &
+        !str_detect(event_name, pattern_collapse(class_exceptions_dance)) ~
+        "performance",
+      category == "Theater Performances" &
+        !str_detect(event_name, pattern_collapse(class_exceptions_theater)) ~
+        "performance",
+      category %in% performance_cats ~ "performance",
+
+      ## ------ CLASSES ------
+      # Class exceptions inside performance categories:
+      category == "Performances" &
+        str_detect(event_name, pattern_collapse(class_exceptions_performance)) ~
+        "class",
+      category == "Dance Performances" &
+        str_detect(event_name, pattern_collapse(class_exceptions_dance)) ~
+        "class",
+      category == "Theater Performances" &
+        str_detect(event_name, pattern_collapse(class_exceptions_theater)) ~
+        "class",
+      # Categories and partials
+      category %in% class_cats ~ "class",
+      str_detect(category, "Classes|Martial Arts|Workshops") ~ "class",
+      category == "Children's Theater" ~ "class",
+      category == "Chorale" ~ "class", # review later if needed
+
+      # Classes - NA category but matching key patterns
+      (is.na(category) &
+        str_detect(event_name, pattern_collapse(class_patterns_na))) ~
+        "class",
+      (is.na(category) &
+        str_detect(event_name, "Teen") &
+        str_detect(event_name, "Showcase")) ~
+        "class",
+
+      ## ------ COMMUNITY ------
+      category %in% community_cats ~ "community",
+      str_detect(event_name, pattern_collapse(community_patterns)) ~
+        "community",
+
+      ## ------ OTHER ------
+      category %in% other_cats | is.na(category) ~ "other",
+      str_detect(event_name, "Gala") ~ "other",
+
+      ## ------ CATCH-ALL ------
+      TRUE ~ "ERROR"
+    )
+  ) |>
+  select(event_majorcat, category, event_name, code, event_id, everything()) |>
+  arrange(event_majorcat, category, event_name, starts_on)
+
+count(evcat2, event_majorcat)
+tmp <- count(evcat2, event_majorcat, category, event_name)
+
+saveRDS(evcat2, fs::path(rds, "events_erin.rds"))
+
+```

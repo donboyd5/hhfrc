@@ -321,7 +321,12 @@ ns(registrations)
 count(registrations, type)
 count(registrations, event_status)
 
-registrations |>
+# djb create registrations2 to make up for bad names -- TEMPORARY FIX ----
+registrations2 <- registrations |>
+  rename(event_status = status)
+count(registrations2, event_status)
+
+registrations2 |>
   filter(
     type %in% c("Registrant", "Registrant & Attendee"),
     event_status == "SUCCEEDED"
@@ -329,7 +334,7 @@ registrations |>
   pull(amount) |>
   sum()
 
-reg1 <- registrations |>
+reg1 <- registrations2 |>
   filter(!is.na(id)) |>
   filter(
     type %in% c("Registrant", "Registrant & Attendee"),
@@ -364,10 +369,14 @@ donor_events <- hhall_enhanced |>
 ## Winnow and write to google sheets
 
 ```{r}
+#| label: google-sheets
+#| eval: false
 
-gs4_auth() # always
-# gswb <- gs4_create("donors") # ONETIME
-# sheet_write(donfinal, gswb, sheet = "all_donors") # writing a full sheet
+# djb commented out for now !!! ----
+
+# gs4_auth() # always
+# # gswb <- gs4_create("donors") # ONETIME
+# # sheet_write(donfinal, gswb, sheet = "all_donors") # writing a full sheet
 
 # ssid <- "1xwNYOddcJSRmAvaR9DlT1Aixrs1WciwVYUvv3AzmdM0"
 # donors_workbook <- "https://docs.google.com/spreadsheets/d/1xwNYOddcJSRmAvaR9DlT1Aixrs1WciwVYUvv3AzmdM0"
